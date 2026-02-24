@@ -20,7 +20,7 @@ def load_data():
     print("Loading preprocessed data ...")
     with open("data/metadata.json", "r") as f:
         metadata = json.load(f)
-    spectra = np.load("data/spectra.npy", mmap_mode="r")
+    spectra = np.load("data/spectra.npy", mmap_mode="r", allow_pickle=True)
     print(f"  Metadata: {metadata['_row_count']} rows")
     print(f"  Spectra: {spectra.shape}")
 
