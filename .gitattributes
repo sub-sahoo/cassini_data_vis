@@ -1,0 +1,2 @@
+data/ConfDataSpicy.csv filter=lfs diff=lfs merge=lfs -text
+data/spectra.npy filter=lfs diff=lfs merge=lfs -text
