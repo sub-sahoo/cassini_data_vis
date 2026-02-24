@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cassini Dust Analyzer Explorer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-extra.min.css">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
 </head>
@@ -21,7 +23,7 @@
   <div id="filter-bar">
     <div class="filter-group">
       <label>Chemistry</label>
-      <select id="filter-category" multiple size="4">
+      <select id="filter-category" multiple size="5">
         <option value="__all__" selected>All Categories</option>
       </select>
     </div>
@@ -66,59 +68,103 @@
     <button id="btn-reset-filters">Reset</button>
   </div>
 
-  <main>
-    <div id="left-col">
-      <div class="panel" id="saturn-map-panel">
-        <div class="panel-header">
-          <span>Saturn Ring Plane — Top-Down View</span>
-          <span class="panel-hint">Scroll to zoom · Drag to pan · Click to select</span>
+  <div id="dashboard-container">
+    <div id="widget-palette">
+      <h3>Add Widgets</h3>
+      <p class="palette-hint">Click to add to grid · Drag to rearrange · Resize by corners</p>
+      <div class="palette-widgets">
+        <div class="palette-item" data-widget="saturn-map">
+          <span class="palette-icon">🪐</span>
+          <span>Saturn Map</span>
         </div>
-        <div id="saturn-map"></div>
+        <div class="palette-item" data-widget="street-view">
+          <span class="palette-icon">👣</span>
+          <span>Street View</span>
+        </div>
+        <div class="palette-item" data-widget="spectrum">
+          <span class="palette-icon">📊</span>
+          <span>Mass Spectrum</span>
+        </div>
+        <div class="palette-item" data-widget="periodic">
+          <span class="palette-icon">⚛️</span>
+          <span>Periodic Table</span>
+        </div>
       </div>
-      <div class="panel" id="street-view-panel">
-        <div class="panel-header">Street View Navigator</div>
+    </div>
+
+    <div id="grid-container">
+      <div class="grid-stack" id="dashboard-grid"></div>
+    </div>
+  </div>
+
+  <!-- Widget templates (hidden, cloned when adding) -->
+  <template id="tmpl-saturn-map">
+    <div class="panel grid-widget" data-widget-type="saturn-map">
+      <div class="panel-header">
+        <span>Saturn Ring Plane — Top-Down View</span>
+        <span class="panel-header-actions">
+          <span class="panel-hint">Scroll to zoom · Drag to pan · Click to select</span>
+          <button class="widget-remove" title="Remove widget">×</button>
+        </span>
+      </div>
+      <div class="widget-body saturn-map-container"></div>
+    </div>
+  </template>
+  <template id="tmpl-street-view">
+    <div class="panel grid-widget" data-widget-type="street-view">
+      <div class="panel-header">
+        <span>Street View Navigator</span>
+        <button class="widget-remove" title="Remove widget">×</button>
+      </div>
+      <div class="widget-body">
         <div id="street-view-controls">
-          <button id="sv-prev" title="Previous grain (←)">◀ Prev</button>
-          <div id="sv-info">
-            <div id="sv-position">—</div>
-            <div id="sv-detail"></div>
+          <button class="sv-prev" title="Previous grain (←)">◀ Prev</button>
+          <div class="sv-info">
+            <div class="sv-position">—</div>
+            <div class="sv-detail"></div>
           </div>
-          <button id="sv-next" title="Next grain (→)">Next ▶</button>
+          <button class="sv-next" title="Next grain (→)">Next ▶</button>
         </div>
-        <div id="sv-sort-row">
+        <div class="sv-sort-row">
           <label>Walk by:</label>
-          <select id="sv-sort">
+          <select class="sv-sort">
             <option value="time">Time (chronological)</option>
             <option value="radius">Radius (inner → outer)</option>
             <option value="inclination">Inclination (S → N)</option>
             <option value="enceladus">Distance to Enceladus</option>
           </select>
-          <button id="sv-play" title="Auto-play (Space)">▶ Play</button>
+          <button class="sv-play" title="Auto-play (Space)">▶ Play</button>
         </div>
       </div>
     </div>
-
-    <div id="right-col">
-      <div class="panel" id="spectrum-panel">
-        <div class="panel-header">
-          <span>Mass Spectrum</span>
-          <div>
-            <label class="toggle-label"><input type="checkbox" id="spectrum-log" checked> Log scale</label>
-            <label class="toggle-label"><input type="checkbox" id="spectrum-show-elements" checked> Element markers</label>
-          </div>
+  </template>
+  <template id="tmpl-spectrum">
+    <div class="panel grid-widget" data-widget-type="spectrum">
+      <div class="panel-header">
+        <span>Mass Spectrum</span>
+        <div class="panel-header-actions">
+          <label class="toggle-label"><input type="checkbox" class="spectrum-log" checked> Log scale</label>
+          <label class="toggle-label"><input type="checkbox" class="spectrum-show-elements" checked> Element markers</label>
+          <button class="widget-remove" title="Remove widget">×</button>
         </div>
-        <div id="spectrum-viewer"></div>
       </div>
-      <div class="panel" id="periodic-panel">
-        <div class="panel-header">
-          <span>Periodic Table Filter</span>
+      <div class="widget-body spectrum-container"></div>
+    </div>
+  </template>
+  <template id="tmpl-periodic">
+    <div class="panel grid-widget" data-widget-type="periodic">
+      <div class="panel-header">
+        <span>Periodic Table Filter</span>
+        <span class="panel-header-actions">
           <span class="panel-hint">Click elements to filter by mass peaks</span>
-        </div>
-        <div id="periodic-table"></div>
+          <button class="widget-remove" title="Remove widget">×</button>
+        </span>
       </div>
+      <div class="widget-body periodic-container"></div>
     </div>
-  </main>
+  </template>
 
+  <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

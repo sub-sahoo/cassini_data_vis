@@ -1,5 +1,5 @@
 // ============================================================
-//  Cassini Dust Analyzer Explorer — Main Application
+//  Cassini Dust Analyzer Explorer — Dashboard Application
 // ============================================================
 
 const CONFIG = {
@@ -31,6 +31,7 @@ const CONFIG = {
     "4I": "Iron/Metal", "4S": "Silicate", "4R": "Refractory",
     "4S*": "Silicate (low conf)", "4R*": "Refractory (low conf)",
   },
+  LAYOUT_KEY: "cassini_dashboard_layout",
 };
 
 // Periodic table element data: [symbol, atomicNumber, atomicMass, row, col, relevant]
@@ -74,9 +75,12 @@ const APP = {
     elements: new Set(),
   },
   streetView: { pos: 0, sortKey: "time", playing: false, playTimer: null },
+  streetViewWidget: null,
   etMin: 0, etMax: 1,
   mapSketch: null,
   specSketch: null,
+  grid: null,
+  widgetsPresent: new Set(),
 };
 
 // ---- Utility ----
@@ -157,6 +161,7 @@ function applyFilters() {
   updateStatsBar();
   sortStreetView();
   if (APP.mapSketch) APP.mapSketch.redraw();
+  if (APP.specSketch) APP.specSketch.redraw();
 }
 
 function sortStreetView() {
@@ -205,8 +210,11 @@ function updateStatsBar() {
 function updateStreetViewInfo() {
   const pos = APP.streetView.pos;
   const total = APP.filteredIndices.length;
-  document.getElementById("sv-position").textContent =
-    total > 0 ? `${pos + 1} / ${total}` : "No data";
+  if (!APP.streetViewWidget) return;
+  const posEl = APP.streetViewWidget.querySelector(".sv-position");
+  const detailEl = APP.streetViewWidget.querySelector(".sv-detail");
+  if (!posEl || !detailEl) return;
+  posEl.textContent = total > 0 ? `${pos + 1} / ${total}` : "No data";
 
   if (total > 0) {
     const idx = APP.filteredIndices[pos];
@@ -217,16 +225,180 @@ function updateStreetViewInfo() {
       `Inc=${(m.Inclination[idx] ?? 0).toFixed(1)}°`,
       `Cat: ${m["M3 Category"][idx]}`,
     ];
-    document.getElementById("sv-detail").textContent = parts.join("  ·  ");
+    detailEl.textContent = parts.join("  ·  ");
   } else {
-    document.getElementById("sv-detail").textContent = "";
+    detailEl.textContent = "";
   }
+}
+
+// ============================================================
+//  Dashboard Grid & Widgets
+// ============================================================
+const DEFAULT_LAYOUT = [
+  { id: "saturn-map", x: 0, y: 0, w: 2, h: 2 },
+  { id: "spectrum", x: 2, y: 0, w: 2, h: 2 },
+  { id: "street-view", x: 0, y: 2, w: 2, h: 1 },
+  { id: "periodic", x: 2, y: 2, w: 2, h: 2 },
+];
+
+function initDashboard() {
+  const gridEl = document.getElementById("dashboard-grid");
+  gridEl.classList.add("gs-4");
+
+  APP.grid = GridStack.init({
+    column: 4,
+    cellHeight: 120,
+    float: true,
+    animate: true,
+    margin: 8,
+  }, gridEl);
+
+  APP.grid.on("resize stop drag stop", () => saveLayout());
+  APP.grid.on("removed", (e, nodes) => {
+    const list = Array.isArray(nodes) ? nodes : [nodes];
+    list.forEach((node) => {
+      const el = node?.el || node;
+      const type = el?.getAttribute?.("data-widget-type") || el?.querySelector?.("[data-widget-type]")?.getAttribute("data-widget-type");
+      if (type) {
+        APP.widgetsPresent.delete(type);
+        updatePaletteState();
+        if (type === "saturn-map" && APP.mapSketch) {
+          APP.mapSketch.remove();
+          APP.mapSketch = null;
+        }
+        if (type === "spectrum" && APP.specSketch) {
+          APP.specSketch.remove();
+          APP.specSketch = null;
+        }
+        if (type === "street-view") APP.streetViewWidget = null;
+      }
+    });
+  });
+
+  initWidgetPalette();
+  loadLayoutOrDefault();
+}
+
+function initWidgetPalette() {
+  document.querySelectorAll(".palette-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      const type = item.dataset.widget;
+      if (APP.widgetsPresent.has(type)) return;
+      addWidget(type);
+    });
+  });
+}
+
+function updatePaletteState() {
+  document.querySelectorAll(".palette-item").forEach((item) => {
+    const type = item.dataset.widget;
+    item.classList.toggle("disabled", APP.widgetsPresent.has(type));
+  });
+}
+
+function addWidget(type) {
+  if (APP.widgetsPresent.has(type)) return;
+
+  const tmpl = document.getElementById(`tmpl-${type}`);
+  if (!tmpl) return;
+
+  const clone = tmpl.content.cloneNode(true);
+  const widgetEl = clone.querySelector(".grid-widget");
+  const opts = { w: 2, h: 2, minW: 1, minH: 1, id: type };
+  const node = APP.grid.addWidget(widgetEl, opts);
+  const gsEl = node.el || node;
+  if (gsEl) gsEl.setAttribute("data-widget-type", type);
+
+  APP.widgetsPresent.add(type);
+  updatePaletteState();
+
+  setTimeout(() => initWidget(type, widgetEl), 50);
+}
+
+function initWidget(type, widgetEl) {
+  const removeBtn = widgetEl.querySelector(".widget-remove");
+  if (removeBtn) {
+    removeBtn.addEventListener("click", () => {
+      const gsItem = widgetEl.closest(".grid-stack-item");
+      if (gsItem && APP.grid) APP.grid.removeWidget(gsItem, true);
+    });
+  }
+  switch (type) {
+    case "saturn-map": {
+      const container = widgetEl.querySelector(".saturn-map-container");
+      if (container) createSaturnMap(container);
+      break;
+    }
+    case "street-view": {
+      APP.streetViewWidget = widgetEl;
+      initStreetViewInWidget(widgetEl);
+      updateStreetViewInfo();
+      break;
+    }
+    case "spectrum": {
+      const container = widgetEl.querySelector(".spectrum-container");
+      const logCb = widgetEl.querySelector(".spectrum-log");
+      const elemCb = widgetEl.querySelector(".spectrum-show-elements");
+      if (container) createSpectrumViewer(container, logCb, elemCb);
+      break;
+    }
+    case "periodic": {
+      const container = widgetEl.querySelector(".periodic-container");
+      if (container) buildPeriodicTable(container);
+      break;
+    }
+  }
+}
+
+function saveLayout() {
+  const items = APP.grid.save(false).map((n) => {
+    const id = n.el?.getAttribute("data-widget-type") || n.el?.querySelector("[data-widget-type]")?.getAttribute("data-widget-type") || n.id;
+    return id ? { id, x: n.x, y: n.y, w: n.w, h: n.h } : null;
+  }).filter(Boolean);
+  try {
+    localStorage.setItem(CONFIG.LAYOUT_KEY, JSON.stringify(items));
+  } catch (e) {}
+}
+
+function loadLayoutOrDefault() {
+  let layout = null;
+  try {
+    const s = localStorage.getItem(CONFIG.LAYOUT_KEY);
+    if (s) layout = JSON.parse(s);
+  } catch (e) {}
+  if (!layout || !Array.isArray(layout) || layout.length === 0) {
+    layout = DEFAULT_LAYOUT;
+  }
+
+  APP.widgetsPresent.clear();
+  APP.grid.removeAll(true);
+  layout.forEach((item) => {
+    const type = item.id;
+    if (!type || APP.widgetsPresent.has(type)) return;
+    const tmpl = document.getElementById(`tmpl-${type}`);
+    if (!tmpl) return;
+
+    const clone = tmpl.content.cloneNode(true);
+    const widgetEl = clone.querySelector(".grid-widget");
+    const opts = {
+      x: item.x ?? 0, y: item.y ?? 0,
+      w: item.w ?? 2, h: item.h ?? 2,
+      minW: 1, minH: 1, id: type,
+    };
+    const node = APP.grid.addWidget(widgetEl, opts);
+    const gsEl = node?.el || node;
+    if (gsEl) gsEl.setAttribute("data-widget-type", type);
+    APP.widgetsPresent.add(type);
+    initWidget(type, widgetEl);
+  });
+  updatePaletteState();
 }
 
 // ============================================================
 //  Saturn Ring-Plane Map (p5.js instance)
 // ============================================================
-function createSaturnMap() {
+function createSaturnMap(container) {
+  if (APP.mapSketch) return;
   const sketch = (p) => {
     let zoom = 1;
     let panX = 0, panY = 0;
@@ -242,17 +414,11 @@ function createSaturnMap() {
         y: cy - yKm * BASE_SCALE * zoom * p.height / 2 + panY,
       };
     }
-    function s2w(sx, sy) {
-      const cx = p.width / 2, cy = p.height / 2;
-      return {
-        x: (sx - cx - panX) / (BASE_SCALE * zoom * p.width / 2),
-        y: -(sy - cy - panY) / (BASE_SCALE * zoom * p.height / 2),
-      };
-    }
 
     p.setup = () => {
-      const container = document.getElementById("saturn-map");
-      const cv = p.createCanvas(container.clientWidth, container.clientHeight);
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const cv = p.createCanvas(w, h);
       cv.parent(container);
       p.noLoop();
       p.textFont("monospace");
@@ -265,7 +431,6 @@ function createSaturnMap() {
       const satPos = w2s(0, 0);
       const satR = CONFIG.SATURN_RADIUS_KM * BASE_SCALE * zoom * p.width / 2;
 
-      // Rings (approximate A, B rings)
       p.noFill();
       p.strokeWeight(Math.max(1, satR * 0.3));
       p.stroke(80, 70, 50, 40);
@@ -274,7 +439,6 @@ function createSaturnMap() {
       p.stroke(90, 80, 60, 30);
       p.ellipse(satPos.x, satPos.y, satR * 3.4, satR * 3.4);
 
-      // Moon orbits
       p.strokeWeight(0.5);
       for (const moon of CONFIG.MOON_ORBITS) {
         const r = moon.r_km * BASE_SCALE * zoom * p.width / 2;
@@ -285,21 +449,19 @@ function createSaturnMap() {
         if (r > 20) {
           p.noStroke();
           p.fill(p.color(moon.color + "80"));
-          p.textSize(9);
+          p.textSize(11);
           p.textAlign(p.LEFT, p.CENTER);
-          p.text(moon.name, satPos.x + r + 4, satPos.y);
+          p.text(moon.name, satPos.x + r + 6, satPos.y);
         }
       }
 
-      // Saturn body
       p.noStroke();
       p.fill(180, 160, 100);
       p.ellipse(satPos.x, satPos.y, Math.max(4, satR * 2), Math.max(4, satR * 2));
 
-      // Data points
       const m = APP.meta;
       const indices = APP.filteredIndices;
-      const pointSize = Math.max(2, Math.min(6, 4 / Math.sqrt(zoom)));
+      const pointSize = Math.max(2.5, Math.min(7, 5 / Math.sqrt(zoom)));
 
       for (const i of indices) {
         const x2d = m.X2D[i], y2d = m.Y2D[i];
@@ -311,9 +473,9 @@ function createSaturnMap() {
         if (i === APP.selectedIdx) {
           p.fill(255);
           p.noStroke();
-          p.ellipse(sp.x, sp.y, pointSize + 6, pointSize + 6);
+          p.ellipse(sp.x, sp.y, pointSize + 8, pointSize + 8);
           p.fill(255, 100, 50);
-          p.ellipse(sp.x, sp.y, pointSize + 2, pointSize + 2);
+          p.ellipse(sp.x, sp.y, pointSize + 3, pointSize + 3);
         } else {
           p.fill(col);
           p.noStroke();
@@ -321,30 +483,24 @@ function createSaturnMap() {
         }
       }
 
-      // Scale bar
-      drawScaleBar(p);
-    };
-
-    function drawScaleBar(p) {
-      const targetPx = 80;
+      const targetPx = 100;
       const kmPerPx = 1 / (BASE_SCALE * zoom * p.width / 2);
       const targetKm = targetPx * kmPerPx;
       const niceKm = Math.pow(10, Math.floor(Math.log10(targetKm)));
       const barPx = niceKm / kmPerPx;
-
       p.stroke(100);
       p.strokeWeight(2);
-      const bx = 12, by = p.height - 16;
+      const bx = 14, by = p.height - 20;
       p.line(bx, by, bx + barPx, by);
       p.noStroke();
       p.fill(150);
-      p.textSize(10);
+      p.textSize(12);
       p.textAlign(p.LEFT, p.BOTTOM);
       const label = niceKm >= 1e6 ? `${(niceKm/1e6).toFixed(0)}M km`
                   : niceKm >= 1000 ? `${(niceKm/1000).toFixed(0)}K km`
                   : `${niceKm} km`;
       p.text(label, bx, by - 4);
-    }
+    };
 
     p.mouseWheel = (e) => {
       if (p.mouseX < 0 || p.mouseX > p.width || p.mouseY < 0 || p.mouseY > p.height) return true;
@@ -389,7 +545,7 @@ function createSaturnMap() {
     function handleMapClick(p) {
       if (!APP.meta) return;
       const m = APP.meta;
-      let bestDist = 15;
+      let bestDist = 18;
       let bestIdx = -1;
       for (const i of APP.filteredIndices) {
         const x2d = m.X2D[i], y2d = m.Y2D[i];
@@ -405,11 +561,15 @@ function createSaturnMap() {
       }
     }
 
-    p.windowResized = () => {
-      const container = document.getElementById("saturn-map");
-      p.resizeCanvas(container.clientWidth, container.clientHeight);
-      p.redraw();
-    };
+    const ro = new ResizeObserver(() => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w > 0 && h > 0) {
+        p.resizeCanvas(w, h);
+        p.redraw();
+      }
+    });
+    ro.observe(container);
   };
 
   APP.mapSketch = new p5(sketch);
@@ -418,14 +578,16 @@ function createSaturnMap() {
 // ============================================================
 //  Spectrum Viewer (p5.js instance)
 // ============================================================
-function createSpectrumViewer() {
+function createSpectrumViewer(container, logCheckbox, elemCheckbox) {
+  if (APP.specSketch) return;
   const sketch = (p) => {
-    const MARGIN = { top: 25, right: 16, bottom: 36, left: 56 };
+    const MARGIN = { top: 28, right: 20, bottom: 42, left: 60 };
     let hoverBin = -1;
 
     p.setup = () => {
-      const container = document.getElementById("spectrum-viewer");
-      const cv = p.createCanvas(container.clientWidth, container.clientHeight);
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const cv = p.createCanvas(w, h);
       cv.parent(container);
       p.noLoop();
       p.textFont("monospace");
@@ -437,19 +599,18 @@ function createSpectrumViewer() {
       const ph = p.height - MARGIN.top - MARGIN.bottom;
 
       if (!APP.selectedSpectrum) {
-        p.fill(100);
+        p.fill(120);
         p.noStroke();
-        p.textSize(14);
+        p.textSize(16);
         p.textAlign(p.CENTER, p.CENTER);
         p.text("Click a data point on the map to view its spectrum", p.width / 2, p.height / 2);
         return;
       }
 
       const spec = APP.selectedSpectrum;
-      const useLog = document.getElementById("spectrum-log").checked;
-      const showElems = document.getElementById("spectrum-show-elements").checked;
+      const useLog = logCheckbox?.checked ?? true;
+      const showElems = elemCheckbox?.checked ?? true;
 
-      // Compute display values
       const vals = new Float64Array(spec.length);
       let maxVal = 0;
       for (let i = 0; i < spec.length; i++) {
@@ -460,7 +621,6 @@ function createSpectrumViewer() {
       }
       if (maxVal === 0) maxVal = 1;
 
-      // Grid lines
       p.stroke(25, 30, 50);
       p.strokeWeight(0.5);
       for (let m = 0; m <= 200; m += 20) {
@@ -472,7 +632,6 @@ function createSpectrumViewer() {
         p.line(MARGIN.left, y, MARGIN.left + pw, y);
       }
 
-      // Element markers (behind spectrum)
       if (showElems) {
         for (const el of ELEMENTS) {
           if (!el[5]) continue;
@@ -488,15 +647,14 @@ function createSpectrumViewer() {
           const x = MARGIN.left + (bin / CONFIG.NUM_BINS) * pw;
           p.stroke(p.color(mol.color + "30"));
           p.strokeWeight(0.5);
-          p.setLineDash([3, 3]);
+          p.drawingContext.setLineDash?.([3, 3]);
           p.line(x, MARGIN.top, x, MARGIN.top + ph);
-          p.setLineDash([]);
+          p.drawingContext.setLineDash?.([]);
         }
       }
 
-      // Spectrum line
       p.stroke(0, 190, 240);
-      p.strokeWeight(1);
+      p.strokeWeight(1.5);
       p.noFill();
       p.beginShape();
       for (let i = 0; i < spec.length; i++) {
@@ -506,7 +664,6 @@ function createSpectrumViewer() {
       }
       p.endShape();
 
-      // Fill under curve
       p.fill(0, 140, 200, 25);
       p.noStroke();
       p.beginShape();
@@ -519,9 +676,8 @@ function createSpectrumViewer() {
       p.vertex(MARGIN.left + pw, MARGIN.top + ph);
       p.endShape(p.CLOSE);
 
-      // Element labels along top
       if (showElems) {
-        p.textSize(8);
+        p.textSize(10);
         p.textAlign(p.CENTER, p.BOTTOM);
         for (const el of ELEMENTS) {
           if (!el[5]) continue;
@@ -534,26 +690,24 @@ function createSpectrumViewer() {
         }
       }
 
-      // Axes labels
-      p.fill(150);
+      p.fill(160);
       p.noStroke();
-      p.textSize(10);
+      p.textSize(12);
       p.textAlign(p.CENTER, p.TOP);
       for (let m = 0; m <= 200; m += 20) {
         const x = MARGIN.left + (massToBin(m) / CONFIG.NUM_BINS) * pw;
-        p.text(m, x, MARGIN.top + ph + 4);
+        p.text(m, x, MARGIN.top + ph + 6);
       }
-      p.textSize(11);
-      p.text("Mass (AMU)", MARGIN.left + pw / 2, MARGIN.top + ph + 20);
+      p.textSize(13);
+      p.text("Mass (AMU)", MARGIN.left + pw / 2, MARGIN.top + ph + 24);
 
       p.push();
-      p.translate(14, MARGIN.top + ph / 2);
+      p.translate(16, MARGIN.top + ph / 2);
       p.rotate(-p.HALF_PI);
       p.textAlign(p.CENTER, p.CENTER);
       p.text(useLog ? "Intensity (log)" : "Intensity", 0, 0);
       p.pop();
 
-      // Hover crosshair
       if (hoverBin >= 0 && hoverBin < CONFIG.NUM_BINS) {
         const x = MARGIN.left + (hoverBin / CONFIG.NUM_BINS) * pw;
         p.stroke(255, 255, 255, 80);
@@ -564,12 +718,12 @@ function createSpectrumViewer() {
         const intensity = spec[hoverBin].toFixed(2);
         p.noStroke();
         p.fill(0, 0, 0, 200);
-        p.rect(x + 6, MARGIN.top + 4, 100, 28, 4);
+        p.rect(x + 8, MARGIN.top + 6, 110, 32, 6);
         p.fill(220);
-        p.textSize(10);
+        p.textSize(12);
         p.textAlign(p.LEFT, p.TOP);
-        p.text(`${mass} AMU`, x + 10, MARGIN.top + 7);
-        p.text(`Int: ${intensity}`, x + 10, MARGIN.top + 19);
+        p.text(`${mass} AMU`, x + 12, MARGIN.top + 10);
+        p.text(`Int: ${intensity}`, x + 12, MARGIN.top + 24);
       }
     };
 
@@ -585,27 +739,29 @@ function createSpectrumViewer() {
       p.redraw();
     };
 
-    p.windowResized = () => {
-      const container = document.getElementById("spectrum-viewer");
-      p.resizeCanvas(container.clientWidth, container.clientHeight);
-      p.redraw();
-    };
+    const ro = new ResizeObserver(() => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w > 0 && h > 0) {
+        p.resizeCanvas(w, h);
+        p.redraw();
+      }
+    });
+    ro.observe(container);
   };
 
   APP.specSketch = new p5(sketch);
-}
 
-// p5 doesn't have setLineDash natively
-p5.prototype.setLineDash = function(list) {
-  if (this.drawingContext) this.drawingContext.setLineDash(list);
-};
+  if (logCheckbox) logCheckbox.addEventListener("change", () => APP.specSketch?.redraw());
+  if (elemCheckbox) elemCheckbox.addEventListener("change", () => APP.specSketch?.redraw());
+}
 
 // ============================================================
 //  Periodic Table
 // ============================================================
-function buildPeriodicTable() {
-  const container = document.getElementById("periodic-table");
+function buildPeriodicTable(container) {
   container.innerHTML = "";
+  container.classList.add("periodic-table");
 
   for (const [sym, num, mass, row, col, relevant] of ELEMENTS) {
     const cell = document.createElement("div");
@@ -634,14 +790,21 @@ function buildPeriodicTable() {
 // ============================================================
 //  Street View Navigator
 // ============================================================
-function initStreetView() {
-  document.getElementById("sv-prev").addEventListener("click", () => svNavigate(-1));
-  document.getElementById("sv-next").addEventListener("click", () => svNavigate(1));
-  document.getElementById("sv-sort").addEventListener("change", (e) => {
-    APP.streetView.sortKey = e.target.value;
-    sortStreetView();
-  });
-  document.getElementById("sv-play").addEventListener("click", togglePlay);
+function initStreetViewInWidget(widgetEl) {
+  const prevBtn = widgetEl.querySelector(".sv-prev");
+  const nextBtn = widgetEl.querySelector(".sv-next");
+  const sortSelect = widgetEl.querySelector(".sv-sort");
+  const playBtn = widgetEl.querySelector(".sv-play");
+
+  if (prevBtn) prevBtn.addEventListener("click", () => svNavigate(-1));
+  if (nextBtn) nextBtn.addEventListener("click", () => svNavigate(1));
+  if (sortSelect) {
+    sortSelect.addEventListener("change", (e) => {
+      APP.streetView.sortKey = e.target.value;
+      sortStreetView();
+    });
+  }
+  if (playBtn) playBtn.addEventListener("click", togglePlay);
 }
 
 function svNavigate(dir) {
@@ -655,7 +818,8 @@ function svNavigate(dir) {
 function togglePlay() {
   const sv = APP.streetView;
   sv.playing = !sv.playing;
-  document.getElementById("sv-play").textContent = sv.playing ? "⏸ Pause" : "▶ Play";
+  const playBtn = APP.streetViewWidget?.querySelector(".sv-play");
+  if (playBtn) playBtn.textContent = sv.playing ? "⏸ Pause" : "▶ Play";
   if (sv.playing) {
     sv.playTimer = setInterval(() => svNavigate(1), 600);
   } else {
@@ -686,7 +850,6 @@ function initFilters() {
     applyFilters();
   });
 
-  // Time range
   const tMinEl = document.getElementById("filter-time-min");
   const tMaxEl = document.getElementById("filter-time-max");
   const tMinL = document.getElementById("filter-time-min-label");
@@ -709,7 +872,6 @@ function initFilters() {
     applyFilters();
   });
 
-  // Radius
   const rMinEl = document.getElementById("filter-rsat-min");
   const rMaxEl = document.getElementById("filter-rsat-max");
   rMinEl.addEventListener("input", () => {
@@ -723,7 +885,6 @@ function initFilters() {
     applyFilters();
   });
 
-  // Inclination
   const iMinEl = document.getElementById("filter-inc-min");
   const iMaxEl = document.getElementById("filter-inc-max");
   iMinEl.addEventListener("input", () => {
@@ -737,7 +898,6 @@ function initFilters() {
     applyFilters();
   });
 
-  // Confidence
   const confEl = document.getElementById("filter-confidence");
   confEl.addEventListener("input", () => {
     APP.filters.confidence = parseFloat(confEl.value);
@@ -745,7 +905,6 @@ function initFilters() {
     applyFilters();
   });
 
-  // Reset
   document.getElementById("btn-reset-filters").addEventListener("click", () => {
     APP.filters = {
       categories: null,
@@ -791,15 +950,11 @@ async function init() {
     document.getElementById("stats-bar").classList.remove("hidden");
 
     initFilters();
-    buildPeriodicTable();
-    initStreetView();
     initKeyboard();
+    initDashboard();
 
     APP.filteredIndices = Array.from({ length: APP.rowCount }, (_, i) => i);
     applyFilters();
-
-    createSaturnMap();
-    createSpectrumViewer();
 
   } catch (err) {
     document.getElementById("loading-banner").textContent = `Error: ${err.message}`;
@@ -809,8 +964,3 @@ async function init() {
 }
 
 window.addEventListener("DOMContentLoaded", init);
-
-window.addEventListener("resize", () => {
-  if (APP.mapSketch) APP.mapSketch.windowResized();
-  if (APP.specSketch) APP.specSketch.windowResized();
-});
