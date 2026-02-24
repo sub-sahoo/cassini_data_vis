@@ -251,6 +251,7 @@ function initDashboard() {
     float: true,
     animate: true,
     margin: 8,
+    draggable: { handle: '.panel-header' },  // only header bar moves the widget; pan/scroll work in content
   }, gridEl);
 
   APP.grid.on("resize stop drag stop", () => saveLayout());
