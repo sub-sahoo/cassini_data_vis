@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cassini Dust Analyzer Explorer</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Cassini Dust Analyzer Explorer</h1>
+    <div id="loading-banner">Loading data&hellip;</div>
+    <div id="stats-bar" class="hidden">
+      <span id="stat-total"></span>
+      <span id="stat-filtered"></span>
+      <span id="stat-selected"></span>
+    </div>
+  </header>
+
+  <div id="filter-bar">
+    <div class="filter-group">
+      <label>Chemistry</label>
+      <select id="filter-category" multiple size="4">
+        <option value="__all__" selected>All Categories</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Time Range</label>
+      <div class="range-inputs">
+        <input type="range" id="filter-time-min" min="0" max="1" step="0.001" value="0">
+        <input type="range" id="filter-time-max" min="0" max="1" step="0.001" value="1">
+      </div>
+      <div class="range-labels">
+        <span id="filter-time-min-label">—</span>
+        <span id="filter-time-max-label">—</span>
+      </div>
+    </div>
+    <div class="filter-group">
+      <label>Radius (R<sub>sat</sub>)</label>
+      <div class="range-inputs">
+        <input type="range" id="filter-rsat-min" min="0" max="160" step="0.5" value="0">
+        <input type="range" id="filter-rsat-max" min="0" max="160" step="0.5" value="160">
+      </div>
+      <div class="range-labels">
+        <span id="filter-rsat-min-label">0</span>
+        <span id="filter-rsat-max-label">160</span>
+      </div>
+    </div>
+    <div class="filter-group">
+      <label>Inclination (°)</label>
+      <div class="range-inputs">
+        <input type="range" id="filter-inc-min" min="-65" max="65" step="1" value="-65">
+        <input type="range" id="filter-inc-max" min="-65" max="65" step="1" value="65">
+      </div>
+      <div class="range-labels">
+        <span id="filter-inc-min-label">-65°</span>
+        <span id="filter-inc-max-label">65°</span>
+      </div>
+    </div>
+    <div class="filter-group">
+      <label>Confidence</label>
+      <input type="range" id="filter-confidence" min="0" max="1" step="0.01" value="0.5">
+      <span id="filter-confidence-label">≥ 0.50</span>
+    </div>
+    <button id="btn-reset-filters">Reset</button>
+  </div>
+
+  <main>
+    <div id="left-col">
+      <div class="panel" id="saturn-map-panel">
+        <div class="panel-header">
+          <span>Saturn Ring Plane — Top-Down View</span>
+          <span class="panel-hint">Scroll to zoom · Drag to pan · Click to select</span>
+        </div>
+        <div id="saturn-map"></div>
+      </div>
+      <div class="panel" id="street-view-panel">
+        <div class="panel-header">Street View Navigator</div>
+        <div id="street-view-controls">
+          <button id="sv-prev" title="Previous grain (←)">◀ Prev</button>
+          <div id="sv-info">
+            <div id="sv-position">—</div>
+            <div id="sv-detail"></div>
+          </div>
+          <button id="sv-next" title="Next grain (→)">Next ▶</button>
+        </div>
+        <div id="sv-sort-row">
+          <label>Walk by:</label>
+          <select id="sv-sort">
+            <option value="time">Time (chronological)</option>
+            <option value="radius">Radius (inner → outer)</option>
+            <option value="inclination">Inclination (S → N)</option>
+            <option value="enceladus">Distance to Enceladus</option>
+          </select>
+          <button id="sv-play" title="Auto-play (Space)">▶ Play</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="right-col">
+      <div class="panel" id="spectrum-panel">
+        <div class="panel-header">
+          <span>Mass Spectrum</span>
+          <div>
+            <label class="toggle-label"><input type="checkbox" id="spectrum-log" checked> Log scale</label>
+            <label class="toggle-label"><input type="checkbox" id="spectrum-show-elements" checked> Element markers</label>
+          </div>
+        </div>
+        <div id="spectrum-viewer"></div>
+      </div>
+      <div class="panel" id="periodic-panel">
+        <div class="panel-header">
+          <span>Periodic Table Filter</span>
+          <span class="panel-hint">Click elements to filter by mass peaks</span>
+        </div>
+        <div id="periodic-table"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

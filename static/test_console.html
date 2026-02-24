@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Console Error Checker</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff00;
+    }
+    h1 { color: #00ffff; }
+    .log-entry {
+      padding: 8px;
+      margin: 4px 0;
+      border-radius: 4px;
+      background: #2a2a2a;
+    }
+    .error { background: #4a1a1a; color: #ff6666; }
+    .warn { background: #4a4a1a; color: #ffff66; }
+    .info { color: #66ff66; }
+    .success { color: #00ff00; font-weight: bold; }
+    #status {
+      padding: 12px;
+      margin: 12px 0;
+      border-radius: 6px;
+      background: #2a2a2a;
+      border-left: 4px solid #00ff00;
+    }
+    iframe {
+      width: 100%;
+      height: 600px;
+      border: 2px solid #444;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Cassini Data Vis — Console Monitor</h1>
+  
+  <div id="status">Loading...</div>
+  
+  <h2>Console Log:</h2>
+  <div id="console-log"></div>
+  
+  <h2>Page Preview:</h2>
+  <iframe id="test-frame" src="/"></iframe>
+  
+  <script>
+    const logDiv = document.getElementById('console-log');
+    const statusDiv = document.getElementById('status');
+    const logs = [];
+    let errors = 0;
+    let warnings = 0;
+    
+    function addLog(type, message) {
+      logs.push({ type, message, time: Date.now() });
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      const timestamp = new Date().toLocaleTimeString();
+      entry.textContent = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      
+      if (type === 'error') errors++;
+      if (type === 'warn') warnings++;
+      
+      updateStatus();
+    }
+    
+    function updateStatus() {
+      if (errors > 0) {
+        statusDiv.style.borderLeftColor = '#ff0000';
+        statusDiv.innerHTML = `<span style="color: #ff6666;">❌ ${errors} error(s) detected</span>`;
+      } else if (warnings > 0) {
+        statusDiv.style.borderLeftColor = '#ffff00';
+        statusDiv.innerHTML = `<span style="color: #ffff66;">⚠️ ${warnings} warning(s) - No errors</span>`;
+      } else {
+        statusDiv.style.borderLeftColor = '#00ff00';
+        statusDiv.innerHTML = '<span class="success">✓ No console errors detected (loading...)</span>';
+      }
+    }
+    
+    // Intercept console methods
+    const originalConsole = {
+      log: console.log,
+      error: console.error,
+      warn: console.warn,
+      info: console.info
+    };
+    
+    console.error = function(...args) {
+      addLog('error', args.join(' '));
+      originalConsole.error.apply(console, args);
+    };
+    
+    console.warn = function(...args) {
+      addLog('warn', args.join(' '));
+      originalConsole.warn.apply(console, args);
+    };
+    
+    console.info = function(...args) {
+      addLog('info', args.join(' '));
+      originalConsole.info.apply(console, args);
+    };
+    
+    console.log = function(...args) {
+      addLog('info', args.join(' '));
+      originalConsole.log.apply(console, args);
+    };
+    
+    // Listen for errors
+    window.addEventListener('error', (e) => {
+      addLog('error', `${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
+    });
+    
+    window.addEventListener('unhandledrejection', (e) => {
+      addLog('error', `Unhandled Promise Rejection: ${e.reason}`);
+    });
+    
+    // Monitor iframe
+    const iframe = document.getElementById('test-frame');
+    
+    iframe.addEventListener('load', () => {
+      addLog('info', 'Page loaded in iframe');
+      
+      // Check for expected elements after a delay
+      setTimeout(() => {
+        try {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          
+          const checks = {
+            'Title': iframeDoc.querySelector('h1')?.textContent.includes('Cassini'),
+            'Loading banner': !!iframeDoc.getElementById('loading-banner'),
+            'Stats bar': !!iframeDoc.getElementById('stats-bar'),
+            'Saturn map': !!iframeDoc.getElementById('saturn-map'),
+            'Periodic table': !!iframeDoc.getElementById('periodic-table'),
+            'Street view controls': !!iframeDoc.getElementById('street-view-controls'),
+            'Spectrum viewer': !!iframeDoc.getElementById('spectrum-viewer'),
+          };
+          
+          addLog('info', '--- Element Checks ---');
+          for (const [name, present] of Object.entries(checks)) {
+            if (present) {
+              addLog('info', `✓ ${name}: Present`);
+            } else {
+              addLog('error', `✗ ${name}: MISSING`);
+            }
+          }
+          
+          // Check if canvas elements were created by p5.js
+          const canvases = iframeDoc.querySelectorAll('canvas');
+          addLog('info', `Found ${canvases.length} canvas element(s)`);
+          if (canvases.length >= 2) {
+            addLog('info', '✓ Both p5.js sketches (map + spectrum) appear to be created');
+          } else {
+            addLog('warn', `Expected 2 canvases, found ${canvases.length}`);
+          }
+          
+          // Check if periodic table has cells
+          const ptCells = iframeDoc.querySelectorAll('.pt-cell');
+          addLog('info', `Periodic table has ${ptCells.length} cells`);
+          if (ptCells.length > 30) {
+            addLog('info', '✓ Periodic table rendered successfully');
+          } else {
+            addLog('error', `Periodic table may not be rendered correctly (only ${ptCells.length} cells)`);
+          }
+          
+          // Check if loading banner is hidden
+          const loadingBanner = iframeDoc.getElementById('loading-banner');
+          if (loadingBanner && loadingBanner.classList.contains('hidden')) {
+            addLog('info', '✓ Loading banner is hidden (data loaded successfully)');
+          } else {
+            addLog('warn', 'Loading banner is still visible - data may not have loaded');
+          }
+          
+          // Final status
+          setTimeout(() => {
+            if (errors === 0) {
+              statusDiv.style.borderLeftColor = '#00ff00';
+              statusDiv.innerHTML = '<span class="success">✅ ALL CHECKS PASSED! No console errors detected.</span>';
+            }
+          }, 1000);
+          
+        } catch (e) {
+          addLog('error', `Cannot access iframe content: ${e.message}`);
+        }
+      }, 3000);
+    });
+    
+    addLog('info', 'Console monitor started');
+  </script>
+</body>
+</html>
