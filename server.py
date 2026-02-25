@@ -56,6 +56,11 @@ def index():
     return send_from_directory("static", "index.html")
 
 
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory("static", "favicon.ico")
+
+
 @app.route("/api/metadata")
 def api_metadata():
     ensure_data()
