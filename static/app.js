@@ -639,16 +639,16 @@ function createSpectrumViewer(container, logCheckbox, elemCheckbox) {
                     const bin = massToBin(el[2]);
                     const x = MARGIN.left + (bin / CONFIG.NUM_BINS) * pw;
                     const isActive = APP.filters.elements.has(el[0]);
-                    p.stroke(isActive ? p.color(0, 200, 240, 80) : p.color(60, 70, 90, 40));
-                    p.strokeWeight(isActive ? 1.5 : 0.5);
+                    p.stroke(isActive ? p.color(0, 220, 255, 120) : p.color(255, 200, 100, 70));
+                    p.strokeWeight(isActive ? 2.5 : 1.5);
                     p.line(x, MARGIN.top, x, MARGIN.top + ph);
                 }
                 for (const mol of MOLECULES) {
                     const bin = massToBin(mol.mass);
                     const x = MARGIN.left + (bin / CONFIG.NUM_BINS) * pw;
-                    p.stroke(p.color(mol.color + "30"));
-                    p.strokeWeight(0.5);
-                    p.drawingContext.setLineDash?.([3, 3]);
+                    p.stroke(p.color(mol.color + "80"));
+                    p.strokeWeight(1.5);
+                    p.drawingContext.setLineDash?.([4, 4]);
                     p.line(x, MARGIN.top, x, MARGIN.top + ph);
                     p.drawingContext.setLineDash?.([]);
                 }
@@ -678,16 +678,24 @@ function createSpectrumViewer(container, logCheckbox, elemCheckbox) {
             p.endShape(p.CLOSE);
 
             if (showElems) {
-                p.textSize(10);
+                p.textSize(13);
                 p.textAlign(p.CENTER, p.BOTTOM);
+                const MIN_LABEL_SPACE = 28;
+                let lastLabelX = -999;
+                const elementsToShow = [];
                 for (const el of ELEMENTS) {
                     if (!el[5]) continue;
                     const bin = massToBin(el[2]);
                     const x = MARGIN.left + (bin / CONFIG.NUM_BINS) * pw;
-                    const isActive = APP.filters.elements.has(el[0]);
-                    p.fill(isActive ? p.color(0, 220, 255) : p.color(80, 90, 120));
-                    p.noStroke();
-                    p.text(el[0], x, MARGIN.top - 2);
+                    elementsToShow.push({ el, x, isActive: APP.filters.elements.has(el[0]) });
+                }
+                for (const { el, x, isActive } of elementsToShow) {
+                    if (x - lastLabelX >= MIN_LABEL_SPACE) {
+                        p.fill(isActive ? p.color(0, 255, 255) : p.color(255, 220, 140));
+                        p.noStroke();
+                        p.text(el[0], x, MARGIN.top - 2);
+                        lastLabelX = x;
+                    }
                 }
             }
 

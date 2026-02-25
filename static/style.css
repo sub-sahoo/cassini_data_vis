@@ -344,6 +344,11 @@ header h1 {
   color: var(--text-dim);
 }
 
+.panel-hint.spectrum-legend {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .toggle-label {
   margin-left: 14px;
   cursor: pointer;
