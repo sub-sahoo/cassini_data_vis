@@ -26,7 +26,8 @@ spectra = None
 def load_data():
     global metadata, spectra
     folder_url = os.environ.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
-    if folder_url:
+    runtime_env = os.environ.get("RUNTIME_ENV", "production")
+    if folder_url and runtime_env != "development":
         # Pull from Google Drive with gdown
         # use_cookies=False avoids writing to ~/.cache (read-only on Vercel)
         print("Loading data from Google Drive", folder_url[:50], "...")
