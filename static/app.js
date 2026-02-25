@@ -931,6 +931,100 @@ function initFilters() {
     });
 }
 
+// ---- Download / Export ----
+function escapeCsv(val) {
+    if (val === null || val === undefined) return "";
+    const s = String(val);
+    if (s.includes(",") || s.includes('"') || s.includes("\n")) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+}
+
+function downloadFilteredMetadata() {
+    const m = APP.meta;
+    if (!m) return;
+    const cols = Object.keys(m).filter(k => k !== "_row_count");
+    const header = cols.join(",");
+    const rows = [header];
+    for (const i of APP.filteredIndices) {
+        const cells = cols.map(c => {
+            const v = m[c][i];
+            if (Array.isArray(v)) return escapeCsv(v.join(";"));
+            return escapeCsv(v);
+        });
+        rows.push(cells.join(","));
+    }
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `cassini_metadata_filtered_${APP.filteredIndices.length}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function downloadSelectedSpectrum() {
+    if (!APP.selectedSpectrum || APP.selectedIdx < 0) return;
+    const m = APP.meta;
+    const row = {};
+    if (m) {
+        for (const k of Object.keys(m)) if (k !== "_row_count") row[k] = m[k][APP.selectedIdx];
+    }
+    const data = { row_index: APP.selectedIdx, metadata: row, spectrum: APP.selectedSpectrum };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `spectrum_${APP.selectedIdx}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+async function downloadFilteredSpectra() {
+    const indices = APP.filteredIndices;
+    if (indices.length === 0) return;
+    const btn = document.getElementById("btn-download-spectra");
+    if (btn) btn.disabled = true;
+    const BATCH = 50;
+    const allSpectra = {};
+    try {
+        for (let i = 0; i < indices.length; i += BATCH) {
+            const chunk = indices.slice(i, i + BATCH);
+            const resp = await fetch("/api/spectra_batch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ indices: chunk }),
+            });
+            const data = await resp.json();
+            for (let j = 0; j < data.indices.length; j++) {
+                allSpectra[data.indices[j]] = data.spectra[j] ?? [];
+            }
+        }
+        const m = APP.meta;
+        const metadataRows = [];
+        if (m) {
+            const cols = Object.keys(m).filter(k => k !== "_row_count");
+            for (const i of indices) {
+                const row = { row_index: i };
+                for (const k of cols) row[k] = m[k][i];
+                metadataRows.push(row);
+            }
+        }
+        const exportData = { indices, spectra: allSpectra, metadata: metadataRows };
+        const blob = new Blob([JSON.stringify(exportData)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `cassini_spectra_filtered_${indices.length}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function initDownloadButtons() {
+    document.getElementById("btn-download-metadata")?.addEventListener("click", downloadFilteredMetadata);
+    document.getElementById("btn-download-selected")?.addEventListener("click", downloadSelectedSpectrum);
+    document.getElementById("btn-download-spectra")?.addEventListener("click", downloadFilteredSpectra);
+}
+
 // ---- Keyboard navigation ----
 function initKeyboard() {
     document.addEventListener("keydown", (e) => {
@@ -951,6 +1045,7 @@ async function init() {
         document.getElementById("stats-bar").classList.remove("hidden");
 
         initFilters();
+        initDownloadButtons();
         initKeyboard();
         initDashboard();
 

@@ -112,6 +112,38 @@ header h1 {
   font-size: 13px;
 }
 
+.download-group {
+  min-width: auto;
+}
+
+.download-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.download-buttons button {
+  background: var(--panel-bg);
+  color: var(--accent);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.download-buttons button:hover {
+  background: var(--accent-dim);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.download-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .range-inputs {
   display: flex;
   gap: 8px;
