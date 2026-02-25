@@ -28,6 +28,8 @@ def load_data():
     folder_url = os.environ.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
     if folder_url:
         # Pull from Google Drive with gdown
+        # gdown writes cookies to ~/.cache; Vercel's filesystem is read-only except /tmp
+        os.environ["HOME"] = "/tmp"
         print("Loading data from Google Drive", folder_url[:50], "...")
         with tempfile.TemporaryDirectory() as tmp:
             gdown.download_folder(folder_url, output=tmp, quiet=True)
@@ -45,7 +47,7 @@ def load_data():
 
 
 def ensure_data():
-    global metadata, spectra
+    global metadata
     if metadata is None:
         load_data()
 
@@ -103,6 +105,12 @@ def api_mean_spectrum():
         return jsonify({"error": "No valid indices"}), 400
     mean_spec = spectra[valid].mean(axis=0).tolist()
     return jsonify({"spectrum": mean_spec, "count": len(valid)})
+
+
+@app.errorhandler(500)
+def handle_500(e):
+    """Return JSON errors so frontend doesn't get HTML."""
+    return jsonify({"error": str(e) if str(e) else "Internal server error"}), 500
 
 
 if __name__ == "__main__":
