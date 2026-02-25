@@ -28,11 +28,10 @@ def load_data():
     folder_url = os.environ.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
     if folder_url:
         # Pull from Google Drive with gdown
-        # gdown writes cookies to ~/.cache; Vercel's filesystem is read-only except /tmp
-        os.environ["HOME"] = "/tmp"
+        # use_cookies=False avoids writing to ~/.cache (read-only on Vercel)
         print("Loading data from Google Drive", folder_url[:50], "...")
         with tempfile.TemporaryDirectory() as tmp:
-            gdown.download_folder(folder_url, output=tmp, quiet=True)
+            gdown.download_folder(folder_url, output=tmp, quiet=True, use_cookies=False)
             with open(os.path.join(tmp, "metadata.json"), "r") as f:
                 metadata = json.load(f)
             spectra = np.load(os.path.join(tmp, "spectra.npy"), allow_pickle=True)
