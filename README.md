@@ -60,7 +60,8 @@ python3 server.py
 
 ## Usage
 
-1. Open [http://localhost:5000](http://localhost:5000) in a browser.
+1. Go to app deployed at Vercel [here](https://cassini-data-vis.vercel.app)
+   - Open [http://localhost:5000](http://localhost:5000) in a browser if runn
 2. Use the **top filter bar** to filter by chemistry, time, radius, inclination, and confidence.
 3. **Add widgets** from the left palette (Saturn Map, Street View, Mass Spectrum, Periodic Table).
 4. **Drag** a widget by its header bar to move it; **resize** by dragging the corners.
