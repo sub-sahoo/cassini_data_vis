@@ -1,11 +1,19 @@
 """
 Flask server for the Cassini Dust Analyzer Explorer.
 Serves static frontend files and data APIs.
+Loads data from local disk or from a Google Drive folder when GOOGLE_DRIVE_FOLDER_URL is set.
 """
 
 import json
+import os
+import tempfile
+
+import gdown
+from dotenv import load_dotenv
+
+load_dotenv()  # load .env into os.environ for local dev
 import numpy as np
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 app = Flask(__name__, static_folder="static", static_url_path="")
@@ -17,12 +25,29 @@ spectra = None
 
 def load_data():
     global metadata, spectra
-    print("Loading preprocessed data ...")
-    with open("data/metadata.json", "r") as f:
-        metadata = json.load(f)
-    spectra = np.load("data/spectra.npy", mmap_mode="r", allow_pickle=True)
+    folder_url = os.environ.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
+    if folder_url:
+        # Pull from Google Drive with gdown
+        print("Loading data from Google Drive", folder_url[:50], "...")
+        with tempfile.TemporaryDirectory() as tmp:
+            gdown.download_folder(folder_url, output=tmp, quiet=True)
+            with open(os.path.join(tmp, "metadata.json"), "r") as f:
+                metadata = json.load(f)
+            spectra = np.load(os.path.join(tmp, "spectra.npy"), allow_pickle=True)
+    else:
+        # Local disk (dev)
+        print("Loading preprocessed data from disk ...")
+        with open("data/metadata.json", "r") as f:
+            metadata = json.load(f)
+        spectra = np.load("data/spectra.npy", mmap_mode="r", allow_pickle=True)
     print(f"  Metadata: {metadata['_row_count']} rows")
     print(f"  Spectra: {spectra.shape}")
+
+
+def ensure_data():
+    global metadata, spectra
+    if metadata is None:
+        load_data()
 
 
 @app.route("/")
@@ -32,11 +57,17 @@ def index():
 
 @app.route("/api/metadata")
 def api_metadata():
-    return jsonify(metadata)
+    ensure_data()
+    # Stream to avoid Vercel's 4.5MB response limit
+    def generate():
+        for chunk in json.JSONEncoder().iterencode(metadata):
+            yield chunk
+    return Response(generate(), mimetype="application/json")
 
 
 @app.route("/api/spectrum/<int:row_idx>")
 def api_spectrum(row_idx):
+    ensure_data()
     if row_idx < 0 or row_idx >= spectra.shape[0]:
         return jsonify({"error": "Index out of range"}), 404
     spec = spectra[row_idx].tolist()
@@ -49,6 +80,7 @@ def api_spectrum(row_idx):
 
 @app.route("/api/spectra_batch", methods=["POST"])
 def api_spectra_batch():
+    ensure_data()
     """Return spectra for multiple indices (max 50 at a time)."""
     indices = request.json.get("indices", [])
     indices = indices[:50]
@@ -61,6 +93,7 @@ def api_spectra_batch():
 
 @app.route("/api/mean_spectrum", methods=["POST"])
 def api_mean_spectrum():
+    ensure_data()
     """Return the mean spectrum for a set of indices."""
     indices = request.json.get("indices", [])
     if not indices:
