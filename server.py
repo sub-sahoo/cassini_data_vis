@@ -22,12 +22,13 @@ CORS(app)
 metadata = None
 spectra = None
 
+RUNTIME_ENV = os.environ.get("RUNTIME_ENV", "production")
+
 
 def load_data():
     global metadata, spectra
     folder_url = os.environ.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
-    runtime_env = os.environ.get("RUNTIME_ENV", "production")
-    if folder_url and runtime_env != "development":
+    if folder_url and RUNTIME_ENV != "development":
         # Pull from Google Drive with gdown
         # use_cookies=False avoids writing to ~/.cache (read-only on Vercel)
         print("Loading data from Google Drive", folder_url[:50], "...")
@@ -121,4 +122,7 @@ def handle_500(e):
 if __name__ == "__main__":
     load_data()
     print("Starting server at http://localhost:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(
+        host="0.0.0.0", port=5000, 
+        debug=False if RUNTIME_ENV!="development" else True
+    )
