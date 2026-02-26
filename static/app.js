@@ -326,8 +326,12 @@ function initWidgetPalette() {
     document.querySelectorAll(".palette-item").forEach((item) => {
         item.addEventListener("click", () => {
             const type = item.dataset.widget;
-            if (APP.widgetsPresent.has(type)) return;
-            addWidget(type);
+            if (APP.widgetsPresent.has(type)) {
+                const gsItem = APP.grid.el?.querySelector(`[data-widget-type="${type}"]`);
+                if (gsItem && APP.grid) APP.grid.removeWidget(gsItem, true);
+            } else {
+                addWidget(type);
+            }
         });
     });
 }
@@ -335,7 +339,7 @@ function initWidgetPalette() {
 function updatePaletteState() {
     document.querySelectorAll(".palette-item").forEach((item) => {
         const type = item.dataset.widget;
-        item.classList.toggle("disabled", APP.widgetsPresent.has(type));
+        item.classList.toggle("on-grid", APP.widgetsPresent.has(type));
     });
 }
 

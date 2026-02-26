@@ -79,6 +79,8 @@ header h1 {
   gap: 28px;
   flex-shrink: 0;
   flex-wrap: wrap;
+  overflow: auto;
+  max-height: min(50vh, 400px);
 }
 
 .filter-group {
@@ -249,10 +251,10 @@ header h1 {
   transform: scale(0.98);
 }
 
-.palette-item.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  pointer-events: none;
+.palette-item.on-grid {
+  opacity: 0.9;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .palette-icon {
