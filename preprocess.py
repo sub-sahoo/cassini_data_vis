@@ -36,9 +36,12 @@ ELEMENT_MASSES = {
     "Zn": 65, "Rb": 85, "Sr": 88,
 }
 
+# Species explicitly named in CompositionalClassificationTable.xlsx
 MOLECULE_MASSES = {
-    "H2O": 18, "CO": 28, "SiO": 44, "NaCl": 58, "SiO2": 60,
-    "CaCO3": 100,
+    "H2O": 18,    # 1L, 2W, 3W
+    "HCN": 27,    # 2W [HCN]+
+    "HCO": 29,    # 2W [HCO]+
+    "C6H6": 78,   # 2O
 }
 
 
@@ -63,6 +66,15 @@ def find_peaks_simple(spectrum, prominence_factor=3.0, min_distance=5):
         if is_peak:
             peaks.append(i)
     return peaks
+
+ 
+def _is_mass_col(name):
+    """True if column name is a numeric mass value (0.0..200)."""
+    try:
+        v = float(name)
+        return 0 <= v <= 200
+    except (TypeError, ValueError):
+        return False
 
 
 def detect_elements(spectrum, tolerance_bins=4):
@@ -107,7 +119,13 @@ def main():
 
     # --- Extract spectra ---
     print("Extracting spectra ...")
-    spec_cols = [f"MP_FULL_{i:04d}" for i in range(NUM_BINS)]
+    spec_cols = [c for c in df.columns if _is_mass_col(c)]
+    spec_cols = sorted(spec_cols, key=lambda x: float(x))[:NUM_BINS]
+    if len(spec_cols) != NUM_BINS:
+        raise ValueError(
+            f"Expected {NUM_BINS} spectrum columns, found {len(spec_cols)}. "
+            "Check CSV format."
+        )
     spectra = df[spec_cols].values.astype(np.float32)
 
     # --- Detect element presence per spectrum ---
