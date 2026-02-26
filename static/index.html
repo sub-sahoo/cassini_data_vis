@@ -23,9 +23,24 @@
 
   <div id="filter-bar">
     <div class="filter-group">
-      <label>Chemistry</label>
+      <label>Category</label>
       <select id="filter-category" multiple size="5">
         <option value="__all__" selected>All Categories</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Chemical species</label>
+      <select id="filter-species" multiple size="4" title="Filter by element/compound (e.g. Carbon includes C, CO, CaCO₃)">
+        <option value="__none__" selected>None</option>
+        <option value="Carbon">Carbon</option>
+        <option value="Nitrogen">Nitrogen</option>
+        <option value="Oxygen">Oxygen</option>
+        <option value="Sodium">Sodium</option>
+        <option value="Silicon">Silicon</option>
+        <option value="Chlorine">Chlorine</option>
+        <option value="Potassium">Potassium</option>
+        <option value="Calcium">Calcium</option>
+        <option value="Iron">Iron</option>
       </select>
     </div>
     <div class="filter-group">
@@ -98,6 +113,10 @@
           <span class="palette-icon">⚛️</span>
           <span>Periodic Table</span>
         </div>
+        <div class="palette-item" data-widget="config">
+          <span class="palette-icon">⚙️</span>
+          <span>Category Config</span>
+        </div>
       </div>
     </div>
 
@@ -152,13 +171,25 @@
       <div class="panel-header">
         <span>Mass Spectrum</span>
         <div class="panel-header-actions">
-          <span class="panel-hint spectrum-legend">Lines = element (solid) & molecule (dashed) mass markers</span>
+          <span class="panel-hint spectrum-legend">Select elements in periodic table to show mass markers</span>
           <label class="toggle-label"><input type="checkbox" class="spectrum-log" checked> Log scale</label>
           <label class="toggle-label"><input type="checkbox" class="spectrum-show-elements" checked> Element markers</label>
           <button class="widget-remove" title="Remove widget">×</button>
         </div>
       </div>
       <div class="widget-body spectrum-container"></div>
+    </div>
+  </template>
+  <template id="tmpl-config">
+    <div class="panel grid-widget" data-widget-type="config">
+      <div class="panel-header">
+        <span>Category Colors & Sizes</span>
+        <span class="panel-header-actions">
+          <button class="config-reset" title="Reset to defaults">Reset</button>
+          <button class="widget-remove" title="Remove widget">×</button>
+        </span>
+      </div>
+      <div class="widget-body config-container"></div>
     </div>
   </template>
   <template id="tmpl-periodic">

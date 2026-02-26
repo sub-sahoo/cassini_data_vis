@@ -16,7 +16,7 @@ const CONFIG = {
     ],
     CATEGORY_COLORS: {
         "0": "#555555", "0*": "#444444",
-        "1L": "#2277cc", "1M": "#3399ee", "1H": "#55bbff", "1S": "#1155aa", "1S*": "#0e4488",
+        "1L": "#0d4d8c", "1M": "#1a6bb8", "1H": "#2e9bda", "1S": "#7a9fdf", "1S*": "#6a8fd4",
         "2O": "#33aa55", "2W": "#55cc77", "2O*": "#228844", "2W*": "#44bb66",
         "3L": "#cc6622", "3M": "#ee8833", "3W": "#ff9944", "3C": "#ffbb55", "3K": "#ddaa33", "3K*": "#bb8822",
         "4I": "#9944cc", "4S": "#bb66ee", "4R": "#aa55dd", "4S*": "#8833aa", "4R*": "#7722aa",
@@ -24,7 +24,7 @@ const CONFIG = {
     CATEGORY_LABELS: {
         "0": "Unclassified", "0*": "Unclassified (low conf)",
         "1L": "Water Ice (low)", "1M": "Water Ice (med)", "1H": "Water Ice (high)",
-        "1S": "Water Ice (salt)", "1S*": "Water Ice (salt, low conf)",
+        "1S": "Water Ice (high vel, m/19)", "1S*": "Water Ice (high vel, low conf)",
         "2O": "Organic", "2W": "Organic-Water", "2O*": "Organic (low conf)", "2W*": "Organic-Water (low conf)",
         "3L": "Salt (low)", "3M": "Salt (moderate)", "3W": "Salt-Water",
         "3C": "Salt-Carbon", "3K": "Salt-Potassium", "3K*": "Salt-Potassium (low conf)",
@@ -33,6 +33,19 @@ const CONFIG = {
     },
     LAYOUT_KEY: "cassini_dashboard_layout",
 };
+
+let CONFIG_OVERRIDES = { colors: {}, sizes: {} };
+function loadConfigOverrides() {
+    try {
+        const s = localStorage.getItem("cassini_config_overrides");
+        if (s) Object.assign(CONFIG_OVERRIDES, JSON.parse(s));
+    } catch (e) { }
+}
+function saveConfigOverrides() {
+    try {
+        localStorage.setItem("cassini_config_overrides", JSON.stringify(CONFIG_OVERRIDES));
+    } catch (e) { }
+}
 
 // Periodic table element data: [symbol, atomicNumber, atomicMass, row, col, relevant]
 const ELEMENTS = [
@@ -49,14 +62,29 @@ const ELEMENTS = [
     ["In", 49, 114.8, 4, 12, false], ["Sn", 50, 118.7, 4, 13, false], ["Sb", 51, 121.8, 4, 14, false], ["Te", 52, 127.6, 4, 15, false], ["I", 53, 126.9, 4, 16, false], ["Xe", 54, 131.3, 4, 17, false],
 ];
 
+// Species explicitly named in CompositionalClassificationTable.xlsx
 const MOLECULES = [
     { name: "H₂O", mass: 18, color: "#55bbff" },
-    { name: "CO", mass: 28, color: "#55cc77" },
-    { name: "SiO", mass: 44, color: "#cc9944" },
-    { name: "NaCl", mass: 58, color: "#ee8833" },
-    { name: "SiO₂", mass: 60, color: "#cc6622" },
-    { name: "CaCO₃", mass: 100, color: "#ddaa33" },
+    { name: "HCN", mass: 27, color: "#55cc77" },
+    { name: "HCO", mass: 29, color: "#66cc88" },
+    { name: "C₆H₆", mass: 78, color: "#cc9944" },
 ];
+
+// Chemical species (from CompositionalClassificationTable.xlsx). Maps to elements_present from preprocess.
+const CHEMICAL_SPECIES = {
+    Carbon: ["C", "C6H6"],       // 2O organics; 4S mass 12
+    Nitrogen: ["N", "HCN"],      // 2W [HCN]+
+    Oxygen: ["O", "H2O"],        // 1L, 2W, 3W
+    Sodium: ["Na"],              // 1L, 2W, 3W, 3M; 4R
+    Magnesium: ["Mg"],           // 4R silicates
+    Silicon: ["Si"],             // 4R silicates
+    Phosphorus: ["P"],           // 3M rare phosphates
+    Sulfur: ["S"],               // 4I FeS
+    Chlorine: ["Cl"],            // 3M chloride species
+    Potassium: ["K"],            // 3K, 3M
+    Calcium: ["Ca"],             // 4R silicates
+    Iron: ["Fe"],                // 4I, 4R
+};
 
 // ---- App State ----
 const APP = {
@@ -68,6 +96,7 @@ const APP = {
     hoveredIdx: -1,
     filters: {
         categories: null,
+        chemicalSpecies: new Set(),
         timeMin: 0, timeMax: 1,
         rsatMin: 0, rsatMax: 160,
         incMin: -65, incMax: 65,
@@ -91,7 +120,10 @@ function binToMass(bin) {
     return bin * CONFIG.MASS_RANGE[1] / (CONFIG.NUM_BINS - 1);
 }
 function catColor(cat) {
-    return CONFIG.CATEGORY_COLORS[cat] || "#333";
+    return CONFIG_OVERRIDES.colors?.[cat] ?? CONFIG.CATEGORY_COLORS[cat] ?? "#333";
+}
+function catSizeMultiplier(cat) {
+    return CONFIG_OVERRIDES.sizes?.[cat] ?? 1;
 }
 function etToDateStr(et) {
     const j2000 = Date.UTC(2000, 0, 1, 11, 58, 55, 816);
@@ -153,6 +185,16 @@ function applyFilters() {
                 if (!present.includes(el)) { hasAll = false; break; }
             }
             if (!hasAll) continue;
+        }
+
+        if (f.chemicalSpecies.size > 0) {
+            const present = m.elements_present[i] || [];
+            let hasAny = false;
+            for (const species of f.chemicalSpecies) {
+                const targets = CHEMICAL_SPECIES[species];
+                if (targets && targets.some(t => present.includes(t))) { hasAny = true; break; }
+            }
+            if (!hasAny) continue;
         }
 
         result.push(i);
@@ -348,7 +390,60 @@ function initWidget(type, widgetEl) {
             if (container) buildPeriodicTable(container);
             break;
         }
+        case "config": {
+            const container = widgetEl.querySelector(".config-container");
+            if (container) buildConfigPanel(container, widgetEl);
+            break;
+        }
     }
+}
+
+function buildConfigPanel(container, widgetEl) {
+    container.innerHTML = "";
+    const cats = Object.keys(CONFIG.CATEGORY_LABELS);
+    for (const cat of cats) {
+        const row = document.createElement("div");
+        row.className = "config-row";
+        const label = document.createElement("span");
+        label.className = "config-label";
+        label.textContent = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
+        const colorInp = document.createElement("input");
+        colorInp.type = "color";
+        colorInp.value = CONFIG_OVERRIDES.colors?.[cat] ?? CONFIG.CATEGORY_COLORS[cat] ?? "#333";
+        colorInp.title = "Color";
+        const sizeInp = document.createElement("input");
+        sizeInp.type = "range";
+        sizeInp.min = "0.5"; sizeInp.max = "2"; sizeInp.step = "0.1";
+        sizeInp.value = String(CONFIG_OVERRIDES.sizes?.[cat] ?? 1);
+        sizeInp.title = "Size multiplier";
+        const sizeVal = document.createElement("span");
+        sizeVal.className = "config-size-val";
+        sizeVal.textContent = sizeInp.value + "×";
+        sizeInp.addEventListener("input", () => {
+            sizeVal.textContent = sizeInp.value + "×";
+            CONFIG_OVERRIDES.sizes = CONFIG_OVERRIDES.sizes || {};
+            CONFIG_OVERRIDES.sizes[cat] = parseFloat(sizeInp.value);
+            saveConfigOverrides();
+            if (APP.mapSketch) APP.mapSketch.redraw();
+        });
+        colorInp.addEventListener("input", () => {
+            CONFIG_OVERRIDES.colors = CONFIG_OVERRIDES.colors || {};
+            CONFIG_OVERRIDES.colors[cat] = colorInp.value;
+            saveConfigOverrides();
+            if (APP.mapSketch) APP.mapSketch.redraw();
+        });
+        row.appendChild(label);
+        row.appendChild(colorInp);
+        row.appendChild(sizeInp);
+        row.appendChild(sizeVal);
+        container.appendChild(row);
+    }
+    widgetEl.querySelector(".config-reset")?.addEventListener("click", () => {
+        CONFIG_OVERRIDES = { colors: {}, sizes: {} };
+        saveConfigOverrides();
+        buildConfigPanel(container, widgetEl);
+        if (APP.mapSketch) APP.mapSketch.redraw();
+    });
 }
 
 function saveLayout() {
@@ -462,7 +557,7 @@ function createSaturnMap(container) {
 
             const m = APP.meta;
             const indices = APP.filteredIndices;
-            const pointSize = Math.max(2.5, Math.min(7, 5 / Math.sqrt(zoom)));
+            const baseSize = Math.max(2.5, Math.min(7, 5 / Math.sqrt(zoom)));
 
             for (const i of indices) {
                 const x2d = m.X2D[i], y2d = m.Y2D[i];
@@ -470,7 +565,9 @@ function createSaturnMap(container) {
                 const sp = w2s(x2d, y2d);
                 if (sp.x < -10 || sp.x > p.width + 10 || sp.y < -10 || sp.y > p.height + 10) continue;
 
-                const col = p.color(catColor(m["M3 Category"][i]));
+                const cat = m["M3 Category"][i];
+                const pointSize = baseSize * catSizeMultiplier(cat);
+                const col = p.color(catColor(cat));
                 if (i === APP.selectedIdx) {
                     p.fill(255);
                     p.noStroke();
@@ -610,7 +707,7 @@ function createSpectrumViewer(container, logCheckbox, elemCheckbox) {
 
             const spec = APP.selectedSpectrum;
             const useLog = logCheckbox?.checked ?? true;
-            const showElems = elemCheckbox?.checked ?? true;
+            const showElems = (elemCheckbox?.checked ?? true) && APP.filters.elements.size > 0;
 
             const vals = new Float64Array(spec.length);
             let maxVal = 0;
@@ -634,16 +731,19 @@ function createSpectrumViewer(container, logCheckbox, elemCheckbox) {
             }
 
             if (showElems) {
+                const sel = APP.filters.elements;
+                const MOL_ELEMENTS = { H2O: ["H", "O"], HCN: ["H", "C", "N"], HCO: ["H", "C", "O"], C6H6: ["C", "H"] };
                 for (const el of ELEMENTS) {
-                    if (!el[5]) continue;
+                    if (!el[5] || !sel.has(el[0])) continue;
                     const bin = massToBin(el[2]);
                     const x = MARGIN.left + (bin / CONFIG.NUM_BINS) * pw;
-                    const isActive = APP.filters.elements.has(el[0]);
-                    p.stroke(isActive ? p.color(0, 220, 255, 120) : p.color(255, 200, 100, 70));
-                    p.strokeWeight(isActive ? 2.5 : 1.5);
+                    p.stroke(p.color(0, 220, 255, 120));
+                    p.strokeWeight(2.5);
                     p.line(x, MARGIN.top, x, MARGIN.top + ph);
                 }
                 for (const mol of MOLECULES) {
+                    const molEls = MOL_ELEMENTS[mol.name.replace(/₂/g, "2").replace(/₃/g, "3").replace(/₆/g, "6")] || [];
+                    if (!molEls.some(e => sel.has(e))) continue;
                     const bin = massToBin(mol.mass);
                     const x = MARGIN.left + (bin / CONFIG.NUM_BINS) * pw;
                     p.stroke(p.color(mol.color + "80"));
@@ -682,16 +782,17 @@ function createSpectrumViewer(container, logCheckbox, elemCheckbox) {
                 p.textAlign(p.CENTER, p.BOTTOM);
                 const MIN_LABEL_SPACE = 28;
                 let lastLabelX = -999;
+                const sel = APP.filters.elements;
                 const elementsToShow = [];
                 for (const el of ELEMENTS) {
-                    if (!el[5]) continue;
+                    if (!el[5] || !sel.has(el[0])) continue;
                     const bin = massToBin(el[2]);
                     const x = MARGIN.left + (bin / CONFIG.NUM_BINS) * pw;
-                    elementsToShow.push({ el, x, isActive: APP.filters.elements.has(el[0]) });
+                    elementsToShow.push({ el, x });
                 }
-                for (const { el, x, isActive } of elementsToShow) {
+                for (const { el, x } of elementsToShow) {
                     if (x - lastLabelX >= MIN_LABEL_SPACE) {
-                        p.fill(isActive ? p.color(0, 255, 255) : p.color(255, 220, 140));
+                        p.fill(p.color(0, 255, 255));
                         p.noStroke();
                         p.text(el[0], x, MARGIN.top - 2);
                         lastLabelX = x;
@@ -840,14 +941,41 @@ function togglePlay() {
 // ============================================================
 //  Filter Controls
 // ============================================================
+const CATEGORY_GROUPS = {
+    "Water": ["1L", "1M", "1H", "1S", "1S*"],
+    "Organic": ["2O", "2W", "2O*", "2W*"],
+    "Salt": ["3L", "3M", "3W", "3C", "3K", "3K*"],
+    "Silicate/Refractory": ["4I", "4S", "4R", "4S*", "4R*"],
+    "Unclassified": ["0", "0*"],
+};
+
 function initFilters() {
-    const cats = [...new Set(APP.meta["M3 Category"])].sort();
+    const allCats = [...new Set(APP.meta["M3 Category"])].sort();
     const sel = document.getElementById("filter-category");
-    for (const cat of cats) {
-        const opt = document.createElement("option");
-        opt.value = cat;
-        opt.textContent = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
-        sel.appendChild(opt);
+    const grouped = new Set(Object.values(CATEGORY_GROUPS).flat());
+    for (const [groupName, groupCats] of Object.entries(CATEGORY_GROUPS)) {
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = groupName;
+        for (const cat of groupCats) {
+            if (!allCats.includes(cat)) continue;
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
+            optgroup.appendChild(opt);
+        }
+        if (optgroup.children.length) sel.appendChild(optgroup);
+    }
+    const other = allCats.filter(c => !grouped.has(c));
+    if (other.length) {
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = "Other";
+        for (const cat of other) {
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
+            optgroup.appendChild(opt);
+        }
+        sel.appendChild(optgroup);
     }
     sel.addEventListener("change", () => {
         const selected = [...sel.selectedOptions].map(o => o.value);
@@ -914,9 +1042,17 @@ function initFilters() {
         applyFilters();
     });
 
+    const speciesSel = document.getElementById("filter-species");
+    speciesSel?.addEventListener("change", () => {
+        const selected = [...speciesSel.selectedOptions].map(o => o.value).filter(v => v !== "__none__");
+        APP.filters.chemicalSpecies = new Set(selected);
+        applyFilters();
+    });
+
     document.getElementById("btn-reset-filters").addEventListener("click", () => {
         APP.filters = {
             categories: null,
+            chemicalSpecies: new Set(),
             timeMin: 0, timeMax: 1,
             rsatMin: 0, rsatMax: 160,
             incMin: -65, incMax: 65,
@@ -928,6 +1064,7 @@ function initFilters() {
         iMinEl.value = -65; iMaxEl.value = 65;
         confEl.value = 0.5;
         sel.selectedIndex = 0;
+        if (speciesSel) { speciesSel.selectedIndex = 0; }
         updateTimeLabels();
         document.querySelectorAll(".pt-cell.active").forEach(c => c.classList.remove("active"));
         document.getElementById("filter-rsat-min-label").textContent = "0";
@@ -1052,6 +1189,7 @@ async function init() {
         document.getElementById("loading-banner").classList.add("hidden");
         document.getElementById("stats-bar").classList.remove("hidden");
 
+        loadConfigOverrides();
         initFilters();
         initDownloadButtons();
         initKeyboard();
