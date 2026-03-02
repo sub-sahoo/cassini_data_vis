@@ -448,6 +448,7 @@ function buildConfigPanel(container, widgetEl) {
             CONFIG_OVERRIDES.colors = CONFIG_OVERRIDES.colors || {};
             CONFIG_OVERRIDES.colors[cat] = colorInp.value;
             saveConfigOverrides();
+            updateCategoryChipColors();
             if (APP.mapSketch) APP.mapSketch.redraw();
         });
         row.appendChild(label);
@@ -460,6 +461,7 @@ function buildConfigPanel(container, widgetEl) {
         CONFIG_OVERRIDES = { colors: {}, sizes: {} };
         saveConfigOverrides();
         buildConfigPanel(container, widgetEl);
+        updateCategoryChipColors();
         if (APP.mapSketch) APP.mapSketch.redraw();
     });
 }
@@ -993,13 +995,18 @@ function buildCategoryChips() {
                 if (APP.filters.categories == null) APP.filters.categories = new Set();
                 if (APP.filters.categories.has(cat)) {
                     APP.filters.categories.delete(cat);
-                    chip.classList.remove("selected");
+                    if (APP.filters.categories.size === 0) {
+                        APP.filters.categories = null;
+                        container.querySelectorAll(".category-chip").forEach(c => c.classList.remove("selected"));
+                        container.querySelector('[data-cat="__all__"]')?.classList.add("selected");
+                    } else {
+                        chip.classList.remove("selected");
+                    }
                 } else {
                     APP.filters.categories.add(cat);
+                    container.querySelector('[data-cat="__all__"]')?.classList.remove("selected");
                     chip.classList.add("selected");
                 }
-                container.querySelector('[data-cat="__all__"]')?.classList.remove("selected");
-                if (APP.filters.categories.size === 0) APP.filters.categories = null;
             }
             applyFilters();
         });
@@ -1016,6 +1023,15 @@ function buildCategoryChips() {
     for (const cat of allCats.filter(c => !grouped.has(c))) {
         addChip(cat, cat);
     }
+}
+
+function updateCategoryChipColors() {
+    document.querySelectorAll(".category-chip").forEach((chip) => {
+        const cat = chip.dataset.cat;
+        if (!cat || cat === "__all__") return;
+        const color = catColor(cat);
+        chip.style.setProperty("--chip-color", color);
+    });
 }
 
 function syncFilterControlsFromState() {
@@ -1052,7 +1068,12 @@ function syncFilterControlsFromState() {
 
     document.querySelectorAll(".category-chip").forEach((chip) => {
         const cat = chip.dataset.cat;
-        chip.classList.toggle("selected", cat === "__all__" ? APP.filters.categories == null : APP.filters.categories?.has(cat));
+        const showAll = APP.filters.categories == null;
+        if (cat === "__all__") {
+            chip.classList.toggle("selected", showAll);
+        } else {
+            chip.classList.toggle("selected", !showAll && APP.filters.categories != null && APP.filters.categories.has(cat));
+        }
     });
 
     document.querySelectorAll(".pt-cell.active").forEach(c => c.classList.remove("active"));
@@ -1170,6 +1191,7 @@ function initFilters() {
             confidence: defaults.confidence,
             elements: new Set(defaults.elements),
         };
+        selectPoint(-1);
         syncFilterControlsFromState();
         updateTimeLabels();
         applyFilters();
