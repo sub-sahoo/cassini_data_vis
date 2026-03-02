@@ -41,6 +41,62 @@ header h1 {
   white-space: nowrap;
 }
 
+#mode-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mode-label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.mode-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+}
+
+.mode-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mode-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--panel-border);
+  border-radius: 11px;
+  transition: 0.2s;
+}
+
+.mode-slider::before {
+  content: "";
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text);
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.mode-switch input:checked + .mode-slider {
+  background: var(--accent-dim);
+}
+
+.mode-switch input:checked + .mode-slider::before {
+  transform: translateX(22px);
+}
+
 #loading-banner {
   color: var(--highlight);
   font-size: 14px;
@@ -96,6 +152,67 @@ header h1 {
   letter-spacing: 0.8px;
   color: var(--text-dim);
   font-weight: 600;
+}
+
+.color-hint {
+  font-size: 11px;
+  text-transform: none;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.filter-advanced {
+  display: flex;
+  gap: 28px;
+}
+
+.filter-advanced.hidden {
+  display: none !important;
+}
+
+#widget-palette.simple-hidden {
+  display: none !important;
+}
+
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.category-chip:hover {
+  border-color: var(--accent);
+}
+
+.category-chip.selected {
+  border-color: var(--chip-color, var(--accent));
+  box-shadow: 0 0 0 1px var(--chip-color, var(--accent));
+}
+
+.category-chip .chip-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--chip-color, #666);
+  flex-shrink: 0;
+}
+
+.category-chip .chip-label {
+  white-space: nowrap;
 }
 
 .filter-group select {

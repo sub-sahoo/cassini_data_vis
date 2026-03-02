@@ -3,6 +3,8 @@
 // ============================================================
 
 const CONFIG = {
+    MODE_KEY: "cassini_simple_mode",
+    LAYOUT_KEY: "cassini_dashboard_layout",
     MASS_RANGE: [0, 200],
     NUM_BINS: 1280,
     SATURN_RADIUS_KM: 58232,
@@ -31,7 +33,6 @@ const CONFIG = {
         "4I": "Iron/Metal", "4S": "Silicate", "4R": "Refractory",
         "4S*": "Silicate (low conf)", "4R*": "Refractory (low conf)",
     },
-    LAYOUT_KEY: "cassini_dashboard_layout",
 };
 
 let CONFIG_OVERRIDES = { colors: {}, sizes: {} };
@@ -86,6 +87,19 @@ const CHEMICAL_SPECIES = {
     Iron: ["Fe"],                // 4I, 4R
 };
 
+// ---- Default config (Simple mode) ----
+function getDefaultFilters() {
+    return {
+        categories: null,
+        chemicalSpecies: new Set(),
+        timeMin: 0, timeMax: 1,
+        rsatMin: 0, rsatMax: 160,
+        incMin: -65, incMax: 65,
+        confidence: 0.6,
+        elements: new Set(),
+    };
+}
+
 // ---- App State ----
 const APP = {
     meta: null,
@@ -94,6 +108,7 @@ const APP = {
     selectedIdx: -1,
     selectedSpectrum: null,
     hoveredIdx: -1,
+    simpleMode: true,
     filters: {
         categories: null,
         chemicalSpecies: new Set(),
@@ -277,10 +292,9 @@ function updateStreetViewInfo() {
 //  Dashboard Grid & Widgets
 // ============================================================
 const DEFAULT_LAYOUT = [
-    { id: "saturn-map", x: 0, y: 0, w: 2, h: 2 },
-    { id: "spectrum", x: 2, y: 0, w: 2, h: 2 },
-    { id: "street-view", x: 0, y: 2, w: 2, h: 1 },
-    { id: "periodic", x: 2, y: 2, w: 2, h: 2 },
+    { id: "saturn-map", x: 0, y: 0, w: 4, h: 4 },
+    { id: "spectrum", x: 0, y: 4, w: 2, h: 2 },
+    { id: "periodic", x: 2, y: 4, w: 2, h: 2 },
 ];
 
 function initDashboard() {
@@ -472,25 +486,26 @@ function loadLayoutOrDefault() {
 
     APP.widgetsPresent.clear();
     APP.grid.removeAll(true);
-    // layout.forEach((item) => {
-    //     const type = item.id;
-    //     if (!type || APP.widgetsPresent.has(type)) return;
-    //     const tmpl = document.getElementById(`tmpl-${type}`);
-    //     if (!tmpl) return;
 
-    //     const clone = tmpl.content.cloneNode(true);
-    //     const widgetEl = clone.querySelector(".grid-widget");
-    //     const opts = {
-    //         x: item.x ?? 0, y: item.y ?? 0,
-    //         w: item.w ?? 2, h: item.h ?? 2,
-    //         minW: 1, minH: 1, id: type,
-    //     };
-    //     const node = APP.grid.addWidget(widgetEl, opts);
-    //     const gsEl = node?.el || node;
-    //     if (gsEl) gsEl.setAttribute("data-widget-type", type);
-    //     APP.widgetsPresent.add(type);
-    //     initWidget(type, widgetEl);
-    // });
+    layout.forEach((item) => {
+        const type = item.id;
+        if (!type || APP.widgetsPresent.has(type)) return;
+        const tmpl = document.getElementById(`tmpl-${type}`);
+        if (!tmpl) return;
+
+        const clone = tmpl.content.cloneNode(true);
+        const widgetEl = clone.querySelector(".grid-widget");
+        const opts = {
+            x: item.x ?? 0, y: item.y ?? 0,
+            w: item.w ?? 2, h: item.h ?? 2,
+            minW: 1, minH: 1, id: type,
+        };
+        const node = APP.grid.addWidget(widgetEl, opts);
+        const gsEl = node?.el || node;
+        if (gsEl) gsEl.setAttribute("data-widget-type", type);
+        APP.widgetsPresent.add(type);
+        initWidget(type, widgetEl);
+    });
     updatePaletteState();
 }
 
@@ -953,43 +968,134 @@ const CATEGORY_GROUPS = {
     "Unclassified": ["0", "0*"],
 };
 
-function initFilters() {
+function buildCategoryChips() {
+    const container = document.getElementById("filter-category-chips");
+    if (!container) return;
+    container.innerHTML = "";
     const allCats = [...new Set(APP.meta["M3 Category"])].sort();
-    const sel = document.getElementById("filter-category");
     const grouped = new Set(Object.values(CATEGORY_GROUPS).flat());
+
+    function addChip(cat, label) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "category-chip";
+        chip.dataset.cat = cat;
+        chip.title = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
+        const color = catColor(cat);
+        chip.style.setProperty("--chip-color", color);
+        chip.innerHTML = `<span class="chip-swatch"></span><span class="chip-label">${label || CONFIG.CATEGORY_LABELS[cat] || cat}</span>`;
+        chip.addEventListener("click", () => {
+            if (cat === "__all__") {
+                APP.filters.categories = null;
+                container.querySelectorAll(".category-chip").forEach(c => c.classList.remove("selected"));
+                container.querySelector('[data-cat="__all__"]')?.classList.add("selected");
+            } else {
+                if (APP.filters.categories == null) APP.filters.categories = new Set();
+                if (APP.filters.categories.has(cat)) {
+                    APP.filters.categories.delete(cat);
+                    chip.classList.remove("selected");
+                } else {
+                    APP.filters.categories.add(cat);
+                    chip.classList.add("selected");
+                }
+                container.querySelector('[data-cat="__all__"]')?.classList.remove("selected");
+                if (APP.filters.categories.size === 0) APP.filters.categories = null;
+            }
+            applyFilters();
+        });
+        container.appendChild(chip);
+    }
+
+    addChip("__all__", "All");
     for (const [groupName, groupCats] of Object.entries(CATEGORY_GROUPS)) {
-        const optgroup = document.createElement("optgroup");
-        optgroup.label = groupName;
         for (const cat of groupCats) {
             if (!allCats.includes(cat)) continue;
-            const opt = document.createElement("option");
-            opt.value = cat;
-            opt.textContent = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
-            optgroup.appendChild(opt);
+            addChip(cat, `${cat}`);
         }
-        if (optgroup.children.length) sel.appendChild(optgroup);
     }
-    const other = allCats.filter(c => !grouped.has(c));
-    if (other.length) {
-        const optgroup = document.createElement("optgroup");
-        optgroup.label = "Other";
-        for (const cat of other) {
-            const opt = document.createElement("option");
-            opt.value = cat;
-            opt.textContent = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
-            optgroup.appendChild(opt);
-        }
-        sel.appendChild(optgroup);
+    for (const cat of allCats.filter(c => !grouped.has(c))) {
+        addChip(cat, cat);
     }
-    sel.addEventListener("change", () => {
-        const selected = [...sel.selectedOptions].map(o => o.value);
-        if (selected.includes("__all__") || selected.length === 0) {
-            APP.filters.categories = null;
-        } else {
-            APP.filters.categories = new Set(selected);
+}
+
+function syncFilterControlsFromState() {
+    const confEl = document.getElementById("filter-confidence");
+    const confLab = document.getElementById("filter-confidence-label");
+    if (confEl) confEl.value = String(APP.filters.confidence);
+    if (confLab) confLab.textContent = `≥ ${APP.filters.confidence.toFixed(2)}`;
+
+    const tMinEl = document.getElementById("filter-time-min");
+    const tMaxEl = document.getElementById("filter-time-max");
+    if (tMinEl) tMinEl.value = String(APP.filters.timeMin);
+    if (tMaxEl) tMaxEl.value = String(APP.filters.timeMax);
+
+    const rMinEl = document.getElementById("filter-rsat-min");
+    const rMaxEl = document.getElementById("filter-rsat-max");
+    if (rMinEl) rMinEl.value = String(APP.filters.rsatMin);
+    if (rMaxEl) rMaxEl.value = String(APP.filters.rsatMax);
+    document.getElementById("filter-rsat-min-label").textContent = APP.filters.rsatMin;
+    document.getElementById("filter-rsat-max-label").textContent = APP.filters.rsatMax;
+
+    const iMinEl = document.getElementById("filter-inc-min");
+    const iMaxEl = document.getElementById("filter-inc-max");
+    if (iMinEl) iMinEl.value = String(APP.filters.incMin);
+    if (iMaxEl) iMaxEl.value = String(APP.filters.incMax);
+    document.getElementById("filter-inc-min-label").textContent = `${APP.filters.incMin}°`;
+    document.getElementById("filter-inc-max-label").textContent = `${APP.filters.incMax}°`;
+
+    const speciesSel = document.getElementById("filter-species");
+    if (speciesSel) {
+        for (const opt of speciesSel.options) {
+            opt.selected = APP.filters.chemicalSpecies.has(opt.value);
         }
-        applyFilters();
+    }
+
+    document.querySelectorAll(".category-chip").forEach((chip) => {
+        const cat = chip.dataset.cat;
+        chip.classList.toggle("selected", cat === "__all__" ? APP.filters.categories == null : APP.filters.categories?.has(cat));
     });
+
+    document.querySelectorAll(".pt-cell.active").forEach(c => c.classList.remove("active"));
+    document.querySelectorAll(".pt-cell").forEach(cell => {
+        const sym = cell.querySelector(".pt-sym")?.textContent;
+        if (sym && APP.filters.elements.has(sym)) cell.classList.add("active");
+    });
+}
+
+function applyModeUI() {
+    const advanced = document.getElementById("filter-advanced");
+    const palette = document.getElementById("widget-palette");
+    const modeWrap = document.getElementById("mode-toggle-wrap");
+    if (advanced) advanced.classList.toggle("hidden", APP.simpleMode);
+    if (palette) palette.classList.toggle("simple-hidden", APP.simpleMode);
+    if (modeWrap) modeWrap.classList.remove("hidden");
+}
+
+function initModeToggle() {
+    try {
+        const stored = localStorage.getItem(CONFIG.MODE_KEY);
+        APP.simpleMode = stored !== "advanced";
+    } catch (e) { }
+    const cb = document.getElementById("mode-advanced");
+    if (cb) {
+        cb.checked = !APP.simpleMode;
+        cb.addEventListener("change", () => {
+            APP.simpleMode = !cb.checked;
+            try { localStorage.setItem(CONFIG.MODE_KEY, APP.simpleMode ? "simple" : "advanced"); } catch (e) { }
+            if (APP.simpleMode) {
+                const df = getDefaultFilters();
+                APP.filters = { ...df, chemicalSpecies: new Set(df.chemicalSpecies), elements: new Set(df.elements) };
+                syncFilterControlsFromState();
+                updateTimeLabels();
+                applyFilters();
+            }
+            applyModeUI();
+        });
+    }
+}
+
+function initFilters() {
+    buildCategoryChips();
 
     const tMinEl = document.getElementById("filter-time-min");
     const tMaxEl = document.getElementById("filter-time-max");
@@ -1054,30 +1160,29 @@ function initFilters() {
     });
 
     document.getElementById("btn-reset-filters").addEventListener("click", () => {
+        const defaults = getDefaultFilters();
         APP.filters = {
-            categories: null,
-            chemicalSpecies: new Set(),
-            timeMin: 0, timeMax: 1,
-            rsatMin: 0, rsatMax: 160,
-            incMin: -65, incMax: 65,
-            confidence: 0.5,
-            elements: new Set(),
+            categories: defaults.categories,
+            chemicalSpecies: new Set(defaults.chemicalSpecies),
+            timeMin: defaults.timeMin, timeMax: defaults.timeMax,
+            rsatMin: defaults.rsatMin, rsatMax: defaults.rsatMax,
+            incMin: defaults.incMin, incMax: defaults.incMax,
+            confidence: defaults.confidence,
+            elements: new Set(defaults.elements),
         };
-        tMinEl.value = 0; tMaxEl.value = 1;
-        rMinEl.value = 0; rMaxEl.value = 160;
-        iMinEl.value = -65; iMaxEl.value = 65;
-        confEl.value = 0.5;
-        sel.selectedIndex = 0;
-        if (speciesSel) { speciesSel.selectedIndex = 0; }
+        syncFilterControlsFromState();
         updateTimeLabels();
-        document.querySelectorAll(".pt-cell.active").forEach(c => c.classList.remove("active"));
-        document.getElementById("filter-rsat-min-label").textContent = "0";
-        document.getElementById("filter-rsat-max-label").textContent = "160";
-        document.getElementById("filter-inc-min-label").textContent = "-65°";
-        document.getElementById("filter-inc-max-label").textContent = "65°";
-        document.getElementById("filter-confidence-label").textContent = "≥ 0.50";
         applyFilters();
     });
+}
+
+function updateTimeLabels() {
+    const tMinEl = document.getElementById("filter-time-min");
+    const tMaxEl = document.getElementById("filter-time-max");
+    const tMinL = document.getElementById("filter-time-min-label");
+    const tMaxL = document.getElementById("filter-time-max-label");
+    if (tMinEl && tMinL) tMinL.textContent = etToDateStr(APP.etMin + parseFloat(tMinEl.value) * (APP.etMax - APP.etMin));
+    if (tMaxEl && tMaxL) tMaxL.textContent = etToDateStr(APP.etMin + parseFloat(tMaxEl.value) * (APP.etMax - APP.etMin));
 }
 
 // ---- Download / Export ----
@@ -1194,7 +1299,14 @@ async function init() {
         document.getElementById("stats-bar").classList.remove("hidden");
 
         loadConfigOverrides();
+        initModeToggle();
+        if (APP.simpleMode) {
+            const df = getDefaultFilters();
+            APP.filters = { ...df, chemicalSpecies: new Set(df.chemicalSpecies), elements: new Set(df.elements) };
+        }
+        applyModeUI();
         initFilters();
+        syncFilterControlsFromState();
         initDownloadButtons();
         initKeyboard();
         initDashboard();
