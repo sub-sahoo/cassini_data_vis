@@ -332,6 +332,7 @@ function initDashboard() {
                 if (type === "street-view") APP.streetViewWidget = null;
             }
         });
+        APP.grid.compact();
     });
 
     initWidgetPalette();
@@ -525,6 +526,9 @@ function createSaturnMap(container) {
         let lastMX = 0, lastMY = 0;
         let pressX = 0, pressY = 0;
         const BASE_SCALE = 1 / 600000;
+        let animating = false, animStartTime = 0, animStartZoom = 0, animEndZoom = 1;
+        const ANIM_DURATION = 4500;
+        let hoveredIdx = -1;
 
         function w2s(xKm, yKm) {
             const cx = p.width / 2, cy = p.height / 2;
@@ -539,12 +543,30 @@ function createSaturnMap(container) {
             const h = container.clientHeight;
             const cv = p.createCanvas(w, h);
             cv.parent(container);
-            p.noLoop();
             p.textFont("monospace");
+            if (APP.tutorial.active && APP.tutorial.step === 0) {
+                zoom = 0.12;
+                animating = true;
+                animStartZoom = 0.12;
+                animEndZoom = 1;
+                animStartTime = p.millis();
+                p.loop();
+            } else {
+                p.noLoop();
+            }
         };
 
         p.draw = () => {
             p.background(8, 10, 18);
+            if (animating) {
+                const t = Math.min(1, (p.millis() - animStartTime) / ANIM_DURATION);
+                const ease = 1 - Math.pow(1 - t, 3);
+                zoom = animStartZoom + (animEndZoom - animStartZoom) * ease;
+                if (t >= 1) {
+                    animating = false;
+                    if (!APP.tutorial.active) p.noLoop();
+                }
+            }
             if (!APP.meta) return;
 
             const satPos = w2s(0, 0);
@@ -621,6 +643,54 @@ function createSaturnMap(container) {
                 : niceKm >= 1000 ? `${(niceKm / 1000).toFixed(0)}K km`
                     : `${niceKm} km`;
             p.text(label, bx, by - 4);
+
+            if (APP.tutorial.active && APP.tutorial.pulseIdx >= 0 && APP.selectedIdx < 0) {
+                const pi = APP.tutorial.pulseIdx;
+                const px2d = m.X2D[pi], py2d = m.Y2D[pi];
+                if (px2d !== null && py2d !== null) {
+                    const pp = w2s(px2d, py2d);
+                    const pulseR = 14 + 6 * Math.sin(p.millis() * 0.004);
+                    const pulseA = 120 + 80 * Math.sin(p.millis() * 0.004);
+                    p.noFill();
+                    p.stroke(0, 184, 240, pulseA);
+                    p.strokeWeight(2);
+                    p.ellipse(pp.x, pp.y, pulseR * 2, pulseR * 2);
+                    p.strokeWeight(1);
+                    p.stroke(0, 184, 240, pulseA * 0.5);
+                    p.ellipse(pp.x, pp.y, pulseR * 2 + 10, pulseR * 2 + 10);
+                }
+            }
+
+            if (hoveredIdx >= 0 && hoveredIdx !== APP.selectedIdx) {
+                const hx = m.X2D[hoveredIdx], hy = m.Y2D[hoveredIdx];
+                if (hx !== null && hy !== null) {
+                    const hp = w2s(hx, hy);
+                    const hCat = m["M3 Category"][hoveredIdx];
+                    const hConf = (m.Confidence[hoveredIdx] ?? 0).toFixed(2);
+                    const hLabel = CONFIG.CATEGORY_LABELS[hCat] || hCat;
+
+                    p.noFill();
+                    p.stroke(255, 255, 255, 160);
+                    p.strokeWeight(1.5);
+                    const hSize = baseSize * catSizeMultiplier(hCat);
+                    p.ellipse(hp.x, hp.y, hSize + 6, hSize + 6);
+
+                    const tipW = 180, tipH = 38;
+                    let tx = hp.x + 14, ty = hp.y - tipH - 6;
+                    if (tx + tipW > p.width - 8) tx = hp.x - tipW - 14;
+                    if (ty < 8) ty = hp.y + 14;
+                    p.fill(0, 0, 0, 210);
+                    p.noStroke();
+                    p.rect(tx, ty, tipW, tipH, 6);
+                    p.fill(220);
+                    p.textSize(12);
+                    p.textAlign(p.LEFT, p.TOP);
+                    p.text(hLabel, tx + 8, ty + 4);
+                    p.fill(160);
+                    p.textSize(11);
+                    p.text(`Confidence: ${hConf}`, tx + 8, ty + 20);
+                }
+            }
         };
 
         p.mouseWheel = (e) => {
@@ -682,6 +752,38 @@ function createSaturnMap(container) {
             }
         }
 
+        p.mouseMoved = () => {
+            if (p.mouseX < 0 || p.mouseX > p.width || p.mouseY < 0 || p.mouseY > p.height) {
+                if (hoveredIdx >= 0) { hoveredIdx = -1; p.redraw(); }
+                return;
+            }
+            if (!APP.meta || animating) return;
+            const m = APP.meta;
+            let bestDist = 18;
+            let bestIdx = -1;
+            for (const i of APP.filteredIndices) {
+                const x2d = m.X2D[i], y2d = m.Y2D[i];
+                if (x2d === null) continue;
+                const sp = w2s(x2d, y2d);
+                const d = Math.hypot(sp.x - p.mouseX, sp.y - p.mouseY);
+                if (d < bestDist) { bestDist = d; bestIdx = i; }
+            }
+            if (bestIdx !== hoveredIdx) {
+                hoveredIdx = bestIdx;
+                p.redraw();
+            }
+        };
+
+        p.setMapView = (z, px, py) => {
+            animStartZoom = zoom;
+            animEndZoom = z;
+            animStartTime = p.millis();
+            animating = true;
+            panX = px || 0;
+            panY = py || 0;
+            p.loop();
+        };
+
         const ro = new ResizeObserver(() => {
             const w = container.clientWidth;
             const h = container.clientHeight;
@@ -720,11 +822,21 @@ function createSpectrumViewer(container, logCheckbox, elemCheckbox) {
             const ph = p.height - MARGIN.top - MARGIN.bottom;
 
             if (!APP.selectedSpectrum) {
-                p.fill(120);
+                const cx = p.width / 2, cy = p.height / 2;
+                p.stroke(30, 40, 60);
+                p.strokeWeight(1.5);
+                p.noFill();
+                p.beginShape();
+                const silhouette = [0,.05,.04,.06,.03,.18,.04,.05,.03,.12,.03,.04,.07,.03,.02,.03,.02,.01];
+                for (let i = 0; i < silhouette.length; i++) {
+                    p.vertex(cx - 80 + i * 10, cy + 10 - silhouette[i] * 120);
+                }
+                p.endShape();
                 p.noStroke();
-                p.textSize(16);
+                p.fill(100);
+                p.textSize(14);
                 p.textAlign(p.CENTER, p.CENTER);
-                p.text("Click a data point on the map to view its spectrum", p.width / 2, p.height / 2);
+                p.text("Click a grain on the map to view its spectrum", cx, cy + 36);
                 return;
             }
 
@@ -1133,6 +1245,7 @@ function initModeToggle() {
 
 function initFilters() {
     buildCategoryChips();
+    buildPresetChips();
 
     const tMinEl = document.getElementById("filter-time-min");
     const tMaxEl = document.getElementById("filter-time-max");
@@ -1221,6 +1334,99 @@ function updateTimeLabels() {
     const tMaxL = document.getElementById("filter-time-max-label");
     if (tMinEl && tMinL) tMinL.textContent = etToDateStr(APP.etMin + parseFloat(tMinEl.value) * (APP.etMax - APP.etMin));
     if (tMaxEl && tMaxL) tMaxL.textContent = etToDateStr(APP.etMin + parseFloat(tMaxEl.value) * (APP.etMax - APP.etMin));
+}
+
+// ============================================================
+//  Preset Views
+// ============================================================
+const PRESET_VIEWS = {
+    "enceladus-plume": {
+        name: "Enceladus Plume",
+        description: "Water ice and organics near Enceladus",
+        categories: ["1L", "1M", "1H", "1S", "1S*", "2O", "2W", "2O*", "2W*"],
+        confidence: 0.7,
+        mapZoom: 1,
+        streetViewSort: "enceladus",
+    },
+    "e-ring": {
+        name: "E-ring Survey",
+        description: "Water ice grains tracing the E-ring",
+        categories: ["1L", "1M", "1H", "1S", "1S*"],
+        confidence: 0.5,
+        rsatMin: 3, rsatMax: 12,
+        mapZoom: 1.0,
+        streetViewSort: "radius",
+    },
+    "silicates-metals": {
+        name: "Silicates & Metals",
+        description: "Iron, silicate, and refractory grains",
+        categories: ["4I", "4S", "4R", "4S*", "4R*"],
+        confidence: 0.5,
+        mapZoom: 1,
+        streetViewSort: "radius",
+    },
+    "full-mission": {
+        name: "Full Mission",
+        description: "All grains across the entire mission, sorted by time",
+        categories: null,
+        confidence: 0.3,
+        mapZoom: 1,
+        streetViewSort: "time",
+    },
+};
+
+function applyPreset(presetId) {
+    const preset = PRESET_VIEWS[presetId];
+    if (!preset) return;
+
+    const df = getDefaultFilters();
+    APP.filters = {
+        categories: preset.categories ? new Set(preset.categories) : null,
+        chemicalSpecies: new Set(),
+        timeMin: preset.timeMin ?? df.timeMin,
+        timeMax: preset.timeMax ?? df.timeMax,
+        rsatMin: preset.rsatMin ?? df.rsatMin,
+        rsatMax: preset.rsatMax ?? df.rsatMax,
+        incMin: preset.incMin ?? df.incMin,
+        incMax: preset.incMax ?? df.incMax,
+        confidence: preset.confidence ?? df.confidence,
+        elements: preset.elements ? new Set(preset.elements) : new Set(),
+    };
+
+    syncFilterControlsFromState();
+    updateTimeLabels();
+    applyFilters();
+
+    if (APP.mapSketch?.setMapView && preset.mapZoom) {
+        APP.mapSketch.setMapView(preset.mapZoom, 0, 0);
+    }
+
+    if (preset.streetViewSort) {
+        APP.streetView.sortKey = preset.streetViewSort;
+        sortStreetView();
+        const sortSel = APP.streetViewWidget?.querySelector(".sv-sort");
+        if (sortSel) sortSel.value = preset.streetViewSort;
+    }
+
+    document.querySelectorAll(".preset-chip").forEach(c => c.classList.remove("selected"));
+    document.querySelector(`.preset-chip[data-preset="${presetId}"]`)?.classList.add("selected");
+}
+
+function buildPresetChips() {
+    const container = document.getElementById("preset-chips");
+    if (!container) return;
+    container.innerHTML = "";
+
+    for (const [id, preset] of Object.entries(PRESET_VIEWS)) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "preset-chip";
+        chip.dataset.preset = id;
+        chip.textContent = preset.name;
+        chip.title = preset.description;
+        chip.addEventListener("click", () => applyPreset(id));
+        container.appendChild(chip);
+    }
 }
 
 // ---- Download / Export ----
@@ -1350,6 +1556,18 @@ const TUTORIAL_STEPS = [
         onEnter() {
             addWidget("spectrum", { w: 2, h: 3 });
             setTimeout(() => scrollToWidget("spectrum"), 200);
+            const m = APP.meta;
+            if (m) {
+                let bestIdx = -1, bestConf = 0;
+                for (const i of APP.filteredIndices) {
+                    const rsat = m.R_sat[i], conf = m.Confidence[i];
+                    if (rsat !== null && rsat > 2 && rsat < 8 && conf !== null && conf > bestConf) {
+                        bestConf = conf;
+                        bestIdx = i;
+                    }
+                }
+                APP.tutorial.pulseIdx = bestIdx;
+            }
         },
     },
     {
@@ -1429,10 +1647,11 @@ function removeTutorialWidget() {
     if (gsItem && APP.grid) APP.grid.removeWidget(gsItem, true);
     APP.widgetsPresent.delete("tutorial");
     APP.tutorial.widgetEl = null;
+    if (APP.grid) APP.grid.compact();
 }
 
 function initTutorial() {
-    APP.tutorial = { active: true, step: 0, monochrome: true, widgetEl: null };
+    APP.tutorial = { active: true, step: 0, monochrome: true, widgetEl: null, pulseIdx: -1 };
     document.body.classList.add("tutorial-active");
 
     document.getElementById("filter-bar").classList.add("tutorial-hidden");
@@ -1499,9 +1718,13 @@ function completeTutorial() {
     modeWrap.classList.remove("tutorial-hidden");
     applyModeUI();
 
+    APP.tutorial.pulseIdx = -1;
     try { localStorage.setItem(CONFIG.TUTORIAL_KEY, "1"); } catch (e) {}
 
-    if (APP.mapSketch) APP.mapSketch.redraw();
+    if (APP.mapSketch) {
+        APP.mapSketch.noLoop();
+        APP.mapSketch.redraw();
+    }
 }
 
 function updateTutorialBanner() {
