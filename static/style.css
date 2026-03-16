@@ -181,6 +181,7 @@ header h1 {
 }
 
 .category-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -192,6 +193,28 @@ header h1 {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s;
+}
+
+.category-chip[data-group]::after {
+  content: attr(data-group);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: var(--panel-border);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.category-chip[data-group]:hover::after {
+  opacity: 1;
 }
 
 .category-chip:hover {

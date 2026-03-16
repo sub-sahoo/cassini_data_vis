@@ -970,6 +970,19 @@ const CATEGORY_GROUPS = {
     "Unclassified": ["0", "0*"],
 };
 
+const GROUP_DISPLAY_NAMES = {
+    "Water": "Water Ice",
+    "Organic": "Organic",
+    "Salt": "Salt",
+    "Silicate/Refractory": "Silicate / Metal",
+    "Unclassified": "Unclassified",
+};
+
+const CAT_TO_GROUP = {};
+for (const [group, cats] of Object.entries(CATEGORY_GROUPS)) {
+    for (const cat of cats) CAT_TO_GROUP[cat] = GROUP_DISPLAY_NAMES[group] || group;
+}
+
 function buildCategoryChips() {
     const container = document.getElementById("filter-category-chips");
     if (!container) return;
@@ -977,12 +990,12 @@ function buildCategoryChips() {
     const allCats = [...new Set(APP.meta["M3 Category"])].sort();
     const grouped = new Set(Object.values(CATEGORY_GROUPS).flat());
 
-    function addChip(cat, label) {
+    function addChip(cat, label, groupName) {
         const chip = document.createElement("button");
         chip.type = "button";
         chip.className = "category-chip";
         chip.dataset.cat = cat;
-        chip.title = `${cat} — ${CONFIG.CATEGORY_LABELS[cat] || cat}`;
+        if (groupName) chip.dataset.group = groupName;
         const color = catColor(cat);
         chip.style.setProperty("--chip-color", color);
         chip.innerHTML = `<span class="chip-swatch"></span><span class="chip-label">${label || CONFIG.CATEGORY_LABELS[cat] || cat}</span>`;
@@ -1015,9 +1028,10 @@ function buildCategoryChips() {
 
     addChip("__all__", "All");
     for (const [groupName, groupCats] of Object.entries(CATEGORY_GROUPS)) {
+        const displayName = GROUP_DISPLAY_NAMES[groupName] || groupName;
         for (const cat of groupCats) {
             if (!allCats.includes(cat)) continue;
-            addChip(cat, `${cat}`);
+            addChip(cat, `${cat}`, displayName);
         }
     }
     for (const cat of allCats.filter(c => !grouped.has(c))) {
