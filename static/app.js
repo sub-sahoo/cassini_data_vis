@@ -10,7 +10,7 @@ const CONFIG = {
     SATURN_RADIUS_KM: 58232,
     MOON_ORBITS: [
         { name: "Mimas", r_km: 185539, color: "#666" },
-        { name: "Enceladus", r_km: 238042, color: "#88ddff" },
+        { name: "Enceladus", r_km: 238042, color: "#777" },
         { name: "Tethys", r_km: 294672, color: "#777" },
         { name: "Dione", r_km: 377415, color: "#888" },
         { name: "Rhea", r_km: 527068, color: "#999" },
