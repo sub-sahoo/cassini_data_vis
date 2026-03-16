@@ -23,13 +23,25 @@
             </label>
             <span class="mode-label">Advanced</span>
         </div>
-        <div id="loading-banner">Loading data&hellip;</div>
+        <div id="loading-banner-inline" class="hidden">Loading data&hellip;</div>
         <div id="stats-bar" class="hidden">
             <span id="stat-total"></span>
             <span id="stat-filtered"></span>
             <span id="stat-selected"></span>
         </div>
     </header>
+
+    <div id="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-rings">
+                <div class="loading-ring"></div>
+                <div class="loading-ring"></div>
+                <div class="loading-ring"></div>
+            </div>
+            <h2 class="loading-title">Loading Cassini CDA Data</h2>
+            <p class="loading-subtitle">28,000+ dust grain spectra from the Saturn system</p>
+        </div>
+    </div>
 
     <div id="filter-bar">
         <div id="filter-group-presets" class="filter-group filter-group-primary">

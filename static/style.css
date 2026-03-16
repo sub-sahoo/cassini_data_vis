@@ -97,9 +97,77 @@ header h1 {
   transform: translateX(22px);
 }
 
-#loading-banner {
+#loading-banner-inline {
   color: var(--highlight);
   font-size: 14px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#loading-overlay.hidden {
+  display: none !important;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-rings {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 28px;
+}
+
+.loading-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+}
+
+.loading-ring:nth-child(1) {
+  border-top-color: var(--accent);
+  animation: spin 2s linear infinite;
+}
+
+.loading-ring:nth-child(2) {
+  inset: 14px;
+  border-right-color: var(--highlight);
+  animation: spin 2.8s linear infinite reverse;
+}
+
+.loading-ring:nth-child(3) {
+  inset: 28px;
+  border-bottom-color: var(--text-dim);
+  animation: spin 3.4s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.5px;
+  margin: 0 0 8px;
+}
+
+.loading-subtitle {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0;
   animation: pulse 1.5s ease-in-out infinite;
 }
 

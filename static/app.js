@@ -1759,7 +1759,7 @@ async function init() {
     try {
         await loadMetadata();
 
-        document.getElementById("loading-banner").classList.add("hidden");
+        document.getElementById("loading-overlay").classList.add("hidden");
         document.getElementById("stats-bar").classList.remove("hidden");
 
         loadConfigOverrides();
@@ -1784,8 +1784,14 @@ async function init() {
         }
 
     } catch (err) {
-        document.getElementById("loading-banner").textContent = `Error: ${err.message}`;
-        document.getElementById("loading-banner").style.color = "#ff4466";
+        const overlay = document.getElementById("loading-overlay");
+        const title = overlay?.querySelector(".loading-title");
+        const sub = overlay?.querySelector(".loading-subtitle");
+        const rings = overlay?.querySelector(".loading-rings");
+        if (title) title.textContent = "Failed to load data";
+        if (title) title.style.color = "#ff4466";
+        if (sub) { sub.textContent = err.message; sub.style.animation = "none"; sub.style.opacity = "1"; }
+        if (rings) rings.style.display = "none";
         console.error(err);
     }
 }
