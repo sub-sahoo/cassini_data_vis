@@ -1318,6 +1318,17 @@ function initDownloadButtons() {
 }
 
 
+function scrollToWidget(type) {
+    const el = document.querySelector(`.grid-stack-item[data-widget-type="${type}"]`);
+    if (!el) return;
+    const container = document.getElementById("grid-container");
+    if (!container) return;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const scrollTarget = container.scrollTop + (elRect.top - containerRect.top) - 16;
+    container.scrollTo({ top: scrollTarget, behavior: "smooth" });
+}
+
 const TUTORIAL_STEPS = [
     {
         question: "Okay, so what even is this dataset?",
@@ -1330,6 +1341,7 @@ const TUTORIAL_STEPS = [
             APP.tutorial.monochrome = false;
             document.getElementById("filter-bar").classList.remove("tutorial-hidden");
             if (APP.mapSketch) APP.mapSketch.redraw();
+            setTimeout(() => scrollToWidget("saturn-map"), 100);
         },
     },
     {
@@ -1337,6 +1349,7 @@ const TUTORIAL_STEPS = [
         detail: "Click any grain on the map to view its time-of-flight mass spectrum — the same technique used in lab chemistry, but measured in space.",
         onEnter() {
             addWidget("spectrum", { w: 2, h: 3 });
+            setTimeout(() => scrollToWidget("spectrum"), 200);
         },
     },
     {
@@ -1344,6 +1357,7 @@ const TUTORIAL_STEPS = [
         detail: "Click elements on the periodic table to overlay reference mass markers on the spectrum. Molecule markers (H\u2082O, HCN, C\u2086H\u2086) appear when relevant elements are selected.",
         onEnter() {
             addWidget("periodic", { w: 2, h: 3 });
+            setTimeout(() => scrollToWidget("periodic"), 200);
         },
     },
     {
@@ -1352,6 +1366,7 @@ const TUTORIAL_STEPS = [
         onEnter() {
             document.getElementById("filter-group-confidence").classList.remove("tutorial-hidden");
             document.getElementById("btn-reset-filters").classList.remove("tutorial-hidden");
+            setTimeout(() => scrollToWidget("tutorial"), 200);
         },
     },
     {
@@ -1364,7 +1379,8 @@ const TUTORIAL_STEPS = [
                 sortStreetView();
                 const sortSel = APP.streetViewWidget?.querySelector(".sv-sort");
                 if (sortSel) sortSel.value = "enceladus";
-            }, 100);
+                scrollToWidget("street-view");
+            }, 200);
         },
     },
     {
@@ -1374,6 +1390,7 @@ const TUTORIAL_STEPS = [
             const adv = document.getElementById("filter-advanced");
             adv.classList.remove("tutorial-hidden");
             adv.classList.remove("hidden");
+            setTimeout(() => scrollToWidget("tutorial"), 200);
         },
     },
     {
@@ -1389,14 +1406,33 @@ const TUTORIAL_STEPS = [
             palette.classList.remove("simple-hidden");
 
             document.body.classList.remove("tutorial-active");
-            APP.grid.enableMove(true);
             APP.grid.enableResize(true);
         },
     },
 ];
 
+function addTutorialWidget(yPos) {
+    const tmpl = document.getElementById("tmpl-tutorial");
+    if (!tmpl) return;
+    const clone = tmpl.content.cloneNode(true);
+    const widgetEl = clone.querySelector(".grid-widget");
+    const opts = { x: 1, y: yPos, w: 2, h: 2, minW: 2, minH: 2, id: "tutorial" };
+    const node = APP.grid.addWidget(widgetEl, opts);
+    const gsEl = node?.el || node;
+    if (gsEl) gsEl.setAttribute("data-widget-type", "tutorial");
+    APP.widgetsPresent.add("tutorial");
+    APP.tutorial.widgetEl = widgetEl;
+}
+
+function removeTutorialWidget() {
+    const gsItem = document.querySelector('.grid-stack-item[data-widget-type="tutorial"]');
+    if (gsItem && APP.grid) APP.grid.removeWidget(gsItem, true);
+    APP.widgetsPresent.delete("tutorial");
+    APP.tutorial.widgetEl = null;
+}
+
 function initTutorial() {
-    APP.tutorial = { active: true, step: 0, monochrome: true };
+    APP.tutorial = { active: true, step: 0, monochrome: true, widgetEl: null };
     document.body.classList.add("tutorial-active");
 
     document.getElementById("filter-bar").classList.add("tutorial-hidden");
@@ -1412,18 +1448,19 @@ function initTutorial() {
     const tmpl = document.getElementById("tmpl-saturn-map");
     const clone = tmpl.content.cloneNode(true);
     const widgetEl = clone.querySelector(".grid-widget");
-    const opts = { x: 0, y: 0, w: 4, h: 5, minW: 1, minH: 1, id: "saturn-map" };
+    const opts = { x: 0, y: 0, w: 4, h: 3, minW: 1, minH: 1, id: "saturn-map" };
     const node = APP.grid.addWidget(widgetEl, opts);
     const gsEl = node?.el || node;
     if (gsEl) gsEl.setAttribute("data-widget-type", "saturn-map");
     APP.widgetsPresent.add("saturn-map");
     initWidget("saturn-map", widgetEl);
+
+    addTutorialWidget(3);
     updatePaletteState();
 
-    APP.grid.enableMove(false);
+    APP.grid.enableMove(true);
     APP.grid.enableResize(false);
 
-    document.getElementById("tutorial-overlay").classList.remove("hidden");
     document.getElementById("tutorial-next").addEventListener("click", advanceTutorial);
     document.getElementById("tutorial-skip").addEventListener("click", completeTutorial);
     updateTutorialBanner();
@@ -1441,6 +1478,7 @@ function advanceTutorial() {
     const step = TUTORIAL_STEPS[nextStep];
     if (step.onEnter) step.onEnter();
     updateTutorialBanner();
+    setTimeout(() => scrollToWidget("tutorial"), 250);
 }
 
 function completeTutorial() {
@@ -1452,10 +1490,9 @@ function completeTutorial() {
         el.classList.remove("tutorial-hidden");
     });
 
+    removeTutorialWidget();
     APP.grid.enableMove(true);
     APP.grid.enableResize(true);
-
-    document.getElementById("tutorial-overlay").classList.add("hidden");
 
     const modeWrap = document.getElementById("mode-toggle-wrap");
     modeWrap.classList.remove("hidden");

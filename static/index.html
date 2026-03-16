@@ -221,22 +221,27 @@
         </div>
     </template>
 
-    <div id="tutorial-overlay" class="hidden">
-        <div id="tutorial-banner">
-            <div class="tutorial-progress">
-                <div class="tutorial-progress-bar">
-                    <div class="tutorial-progress-fill" id="tutorial-progress-fill"></div>
-                </div>
-                <span class="tutorial-step-label">Step <span id="tutorial-step-num">1</span> of <span id="tutorial-step-total">8</span></span>
+    <template id="tmpl-tutorial">
+        <div class="panel grid-widget" data-widget-type="tutorial">
+            <div class="panel-header">
+                <span>Getting Started</span>
             </div>
-            <p id="tutorial-question" class="tutorial-question"></p>
-            <p id="tutorial-detail" class="tutorial-detail"></p>
-            <div class="tutorial-actions">
-                <button id="tutorial-skip" class="tutorial-btn-skip">Skip Tutorial</button>
-                <button id="tutorial-next" class="tutorial-btn-next">Continue &rarr;</button>
+            <div class="widget-body tutorial-widget-body">
+                <div class="tutorial-progress">
+                    <div class="tutorial-progress-bar">
+                        <div class="tutorial-progress-fill" id="tutorial-progress-fill"></div>
+                    </div>
+                    <span class="tutorial-step-label">Step <span id="tutorial-step-num">1</span> of <span id="tutorial-step-total">8</span></span>
+                </div>
+                <p id="tutorial-question" class="tutorial-question"></p>
+                <p id="tutorial-detail" class="tutorial-detail"></p>
+                <div class="tutorial-actions">
+                    <button id="tutorial-skip" class="tutorial-btn-skip">Skip Tutorial</button>
+                    <button id="tutorial-next" class="tutorial-btn-next">Continue &rarr;</button>
+                </div>
             </div>
         </div>
-    </div>
+    </template>
 
     <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.min.js"></script>
     <script src="app.js"></script>
