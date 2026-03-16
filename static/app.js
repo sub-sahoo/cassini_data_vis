@@ -5,6 +5,7 @@
 const CONFIG = {
     MODE_KEY: "cassini_simple_mode",
     LAYOUT_KEY: "cassini_dashboard_layout",
+    TUTORIAL_KEY: "cassini_tutorial_done",
     MASS_RANGE: [0, 200],
     NUM_BINS: 1280,
     SATURN_RADIUS_KM: 58232,
@@ -120,6 +121,7 @@ const APP = {
     },
     streetView: { pos: 0, sortKey: "time", playing: false, playTimer: null },
     streetViewWidget: null,
+    tutorial: { active: false, step: 0, monochrome: false },
     etMin: 0, etMax: 1,
     mapSketch: null,
     specSketch: null,
@@ -357,7 +359,7 @@ function updatePaletteState() {
     });
 }
 
-function addWidget(type) {
+function addWidget(type, layoutOpts) {
     if (APP.widgetsPresent.has(type)) return;
 
     const tmpl = document.getElementById(`tmpl-${type}`);
@@ -365,7 +367,7 @@ function addWidget(type) {
 
     const clone = tmpl.content.cloneNode(true);
     const widgetEl = clone.querySelector(".grid-widget");
-    const opts = { w: 2, h: 2, minW: 1, minH: 1, id: type };
+    const opts = { w: 2, h: 2, minW: 1, minH: 1, id: type, ...(layoutOpts || {}) };
     const node = APP.grid.addWidget(widgetEl, opts);
     const gsEl = node.el || node;
     if (gsEl) gsEl.setAttribute("data-widget-type", type);
@@ -588,7 +590,7 @@ function createSaturnMap(container) {
 
                 const cat = m["M3 Category"][i];
                 const pointSize = baseSize * catSizeMultiplier(cat);
-                const col = p.color(catColor(cat));
+                const col = APP.tutorial.monochrome ? p.color(90, 130, 170) : p.color(catColor(cat));
                 if (i === APP.selectedIdx) {
                     p.fill(255);
                     p.noStroke();
@@ -1315,6 +1317,172 @@ function initDownloadButtons() {
     document.getElementById("btn-download-spectra")?.addEventListener("click", downloadFilteredSpectra);
 }
 
+
+const TUTORIAL_STEPS = [
+    {
+        question: "Okay, so what even is this dataset?",
+        detail: "Cassini's Cosmic Dust Analyzer collected individual dust grains across the Saturn system. Each dot is one grain. Scroll to zoom, drag to pan.",
+    },
+    {
+        question: "Are these all the same kind of dust, or are there different compositions?",
+        detail: "Each grain has been classified by a machine learning model into broad compositional types. Click a chip to isolate that category on the map.",
+        onEnter() {
+            APP.tutorial.monochrome = false;
+            document.getElementById("filter-bar").classList.remove("tutorial-hidden");
+            if (APP.mapSketch) APP.mapSketch.redraw();
+        },
+    },
+    {
+        question: "How can I see the actual mass spectra?",
+        detail: "Click any grain on the map to view its time-of-flight mass spectrum — the same technique used in lab chemistry, but measured in space.",
+        onEnter() {
+            addWidget("spectrum", { w: 2, h: 3 });
+        },
+    },
+    {
+        question: "Which elements are occuring at these peaks?",
+        detail: "Click elements on the periodic table to overlay reference mass markers on the spectrum. Molecule markers (H\u2082O, HCN, C\u2086H\u2086) appear when relevant elements are selected.",
+        onEnter() {
+            addWidget("periodic", { w: 2, h: 3 });
+        },
+    },
+    {
+        question: "Some of the peaks aren't exactly lining up with the atomic masses, so what's going on there?",
+        detail: "The confidence score reflects mass calibration quality — what proportion of similar calibrations agreed with reference values within 3%. Drag the slider to filter out poorly-calibrated grains.",
+        onEnter() {
+            document.getElementById("filter-group-confidence").classList.remove("tutorial-hidden");
+            document.getElementById("btn-reset-filters").classList.remove("tutorial-hidden");
+        },
+    },
+    {
+        question: "There appears to be a lot of water ice near Enceladus' Orbit. What's up with that?",
+        detail: "Browse grains sorted by distance to Enceladus. Use arrow keys or the buttons to flip through and watch how spectra change near the moon.",
+        onEnter() {
+            addWidget("street-view", { w: 2, h: 2 });
+            setTimeout(() => {
+                APP.streetView.sortKey = "enceladus";
+                sortStreetView();
+                const sortSel = APP.streetViewWidget?.querySelector(".sv-sort");
+                if (sortSel) sortSel.value = "enceladus";
+            }, 100);
+        },
+    },
+    {
+        question: "How do I isolate the dust grains by a specific time period or orbital region?",
+        detail: "Slice the data by time, distance from Saturn, orbital inclination, and chemical species to test your own hypotheses.",
+        onEnter() {
+            const adv = document.getElementById("filter-advanced");
+            adv.classList.remove("tutorial-hidden");
+            adv.classList.remove("hidden");
+        },
+    },
+    {
+        question: "You now have a working understanding of everything this CDA tool has to offer, and some of the types of questions you can answer with it.",
+        detail: "Add or remove panels, drag to rearrange, resize from corners. Customize category colors and sizes. Export filtered data for your own analysis.",
+        onEnter() {
+            const modeWrap = document.getElementById("mode-toggle-wrap");
+            modeWrap.classList.remove("tutorial-hidden");
+            modeWrap.classList.remove("hidden");
+
+            const palette = document.getElementById("widget-palette");
+            palette.classList.remove("tutorial-hidden");
+            palette.classList.remove("simple-hidden");
+
+            document.body.classList.remove("tutorial-active");
+            APP.grid.enableMove(true);
+            APP.grid.enableResize(true);
+        },
+    },
+];
+
+function initTutorial() {
+    APP.tutorial = { active: true, step: 0, monochrome: true };
+    document.body.classList.add("tutorial-active");
+
+    document.getElementById("filter-bar").classList.add("tutorial-hidden");
+    document.getElementById("filter-group-confidence").classList.add("tutorial-hidden");
+    document.getElementById("btn-reset-filters").classList.add("tutorial-hidden");
+    document.getElementById("filter-advanced").classList.add("tutorial-hidden");
+    document.getElementById("mode-toggle-wrap").classList.add("tutorial-hidden");
+    document.getElementById("widget-palette").classList.add("tutorial-hidden");
+
+    APP.widgetsPresent.clear();
+    APP.grid.removeAll(true);
+
+    const tmpl = document.getElementById("tmpl-saturn-map");
+    const clone = tmpl.content.cloneNode(true);
+    const widgetEl = clone.querySelector(".grid-widget");
+    const opts = { x: 0, y: 0, w: 4, h: 5, minW: 1, minH: 1, id: "saturn-map" };
+    const node = APP.grid.addWidget(widgetEl, opts);
+    const gsEl = node?.el || node;
+    if (gsEl) gsEl.setAttribute("data-widget-type", "saturn-map");
+    APP.widgetsPresent.add("saturn-map");
+    initWidget("saturn-map", widgetEl);
+    updatePaletteState();
+
+    APP.grid.enableMove(false);
+    APP.grid.enableResize(false);
+
+    document.getElementById("tutorial-overlay").classList.remove("hidden");
+    document.getElementById("tutorial-next").addEventListener("click", advanceTutorial);
+    document.getElementById("tutorial-skip").addEventListener("click", completeTutorial);
+    updateTutorialBanner();
+
+    if (APP.mapSketch) APP.mapSketch.redraw();
+}
+
+function advanceTutorial() {
+    const nextStep = APP.tutorial.step + 1;
+    if (nextStep >= TUTORIAL_STEPS.length) {
+        completeTutorial();
+        return;
+    }
+    APP.tutorial.step = nextStep;
+    const step = TUTORIAL_STEPS[nextStep];
+    if (step.onEnter) step.onEnter();
+    updateTutorialBanner();
+}
+
+function completeTutorial() {
+    APP.tutorial.active = false;
+    APP.tutorial.monochrome = false;
+    document.body.classList.remove("tutorial-active");
+
+    document.querySelectorAll(".tutorial-hidden").forEach(el => {
+        el.classList.remove("tutorial-hidden");
+    });
+
+    APP.grid.enableMove(true);
+    APP.grid.enableResize(true);
+
+    document.getElementById("tutorial-overlay").classList.add("hidden");
+
+    const modeWrap = document.getElementById("mode-toggle-wrap");
+    modeWrap.classList.remove("hidden");
+    modeWrap.classList.remove("tutorial-hidden");
+    applyModeUI();
+
+    try { localStorage.setItem(CONFIG.TUTORIAL_KEY, "1"); } catch (e) {}
+
+    if (APP.mapSketch) APP.mapSketch.redraw();
+}
+
+function updateTutorialBanner() {
+    const step = TUTORIAL_STEPS[APP.tutorial.step];
+    const total = TUTORIAL_STEPS.length;
+
+    document.getElementById("tutorial-step-num").textContent = APP.tutorial.step + 1;
+    document.getElementById("tutorial-step-total").textContent = total;
+    document.getElementById("tutorial-question").textContent = "\u201C" + step.question + "\u201D";
+    document.getElementById("tutorial-detail").textContent = step.detail || "";
+
+    const fill = document.getElementById("tutorial-progress-fill");
+    fill.style.width = `${((APP.tutorial.step + 1) / total) * 100}%`;
+
+    const nextBtn = document.getElementById("tutorial-next");
+    nextBtn.textContent = APP.tutorial.step === total - 1 ? "Start Exploring \u2192" : "Continue \u2192";
+}
+
 // ---- Keyboard navigation ----
 function initKeyboard() {
     document.addEventListener("keydown", (e) => {
@@ -1349,6 +1517,11 @@ async function init() {
 
         APP.filteredIndices = Array.from({ length: APP.rowCount }, (_, i) => i);
         applyFilters();
+
+        const tutorialDone = localStorage.getItem(CONFIG.TUTORIAL_KEY);
+        if (!tutorialDone) {
+            initTutorial();
+        }
 
     } catch (err) {
         document.getElementById("loading-banner").textContent = `Error: ${err.message}`;

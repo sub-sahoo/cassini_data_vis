@@ -32,11 +32,11 @@
     </header>
 
     <div id="filter-bar">
-        <div class="filter-group filter-group-primary">
+        <div id="filter-group-category" class="filter-group filter-group-primary">
             <label>Category</label>
             <div id="filter-category-chips" class="category-chips"></div>
         </div>
-        <div class="filter-group filter-group-primary">
+        <div id="filter-group-confidence" class="filter-group filter-group-primary">
             <label>Confidence</label>
             <input type="range" id="filter-confidence" min="0" max="1" step="0.01" value="0.5">
             <span id="filter-confidence-label">≥ 0.50</span>
@@ -220,6 +220,23 @@
             <div class="widget-body periodic-container"></div>
         </div>
     </template>
+
+    <div id="tutorial-overlay" class="hidden">
+        <div id="tutorial-banner">
+            <div class="tutorial-progress">
+                <div class="tutorial-progress-bar">
+                    <div class="tutorial-progress-fill" id="tutorial-progress-fill"></div>
+                </div>
+                <span class="tutorial-step-label">Step <span id="tutorial-step-num">1</span> of <span id="tutorial-step-total">8</span></span>
+            </div>
+            <p id="tutorial-question" class="tutorial-question"></p>
+            <p id="tutorial-detail" class="tutorial-detail"></p>
+            <div class="tutorial-actions">
+                <button id="tutorial-skip" class="tutorial-btn-skip">Skip Tutorial</button>
+                <button id="tutorial-next" class="tutorial-btn-next">Continue &rarr;</button>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.min.js"></script>
     <script src="app.js"></script>
